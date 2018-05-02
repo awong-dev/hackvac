@@ -24,15 +24,15 @@ static const char *TAG = "hackvac";
 
 void blink_task(void* parameters) {
   static const int BLINK_DELAY_MS = 5000;
-  gpio_pad_select_gpio(BLINK_GPIO);
+  gpio_pad_select_gpio(hackvac::BLINK_GPIO);
   /* Set the GPIO as a push/pull output */
-  gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
+  gpio_set_direction(hackvac::BLINK_GPIO, GPIO_MODE_OUTPUT);
   for (;;) {
       /* Blink off (output low) */
-      gpio_set_level(BLINK_GPIO, 0);
+      gpio_set_level(hackvac::BLINK_GPIO, 0);
       vTaskDelay(BLINK_DELAY_MS / portTICK_PERIOD_MS);
       /* Blink on (output high) */
-      gpio_set_level(BLINK_GPIO, 1);
+      gpio_set_level(hackvac::BLINK_GPIO, 1);
       vTaskDelay(BLINK_DELAY_MS / portTICK_PERIOD_MS);
   }
 }

@@ -3,6 +3,7 @@
 #include "constants.h"
 #include "webserver.h"
 #include "cn105.h"
+#include "led_route.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -65,13 +66,40 @@ static void dump_chip_info() {
 
 void cpp_entry() {
   dump_chip_info();
+
+  // Initialize NVS
+  esp_err_t ret = nvs_flash_init();
+  if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
+    ESP_ERROR_CHECK(nvs_flash_erase());
+    ret = nvs_flash_init();
+  }
+  ESP_ERROR_CHECK(ret);
+
+  wifi_config_t wifi_config;
+  static constexpr char kFallbackSsid[] = "hackvac_setup";
+  static constexpr char kFallbackPassword[] = "cn105rulez";
+  bool is_staion = LoadConfigFromNvs(kFallbackSsid, sizeof(kFallbackSsid),
+                                     kFallbackPassword, sizeof(kFallbackPassword),
+                                     &wifi_config);
+
+  wifi_connect(wifi_config, is_staion);
+
   static hackvac::Controller controller;
   controller.Init();
-  wifi_connect();
+
 
 //  xTaskCreate(&cn105_control_task, "cn105_control_task", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
 
-  xTaskCreate(&http_server_task, "http_server", 4096, NULL, 2, NULL);
+  static hackvac::RouteDescriptor descriptors[] = {
+    {"/h", 2, &hackvac::LedRoute::CreateRoute},
+    {"/l", 2, &hackvac::LedRoute::CreateRoute},
+  };
+
+  HttpServerConfig http_server_config = {
+    descriptors,
+    2,  // TODO(awong): Use arraysize.
+  };
+  xTaskCreate(&http_server_task, "http_server", 4096, &http_server_config, 2, NULL);
 
   // Silly debug tasks.
   xTaskCreate(&blink_task, "blink_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);

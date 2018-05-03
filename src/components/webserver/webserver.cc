@@ -2,8 +2,6 @@
 
 #include "webserver.h"
 
-#include "constants.h"
-#include "led_route.h"
 #include "request_processor.h"
 #include "router.h"
 
@@ -96,47 +94,10 @@ esp_err_t event_handler(void *ctx, system_event_t *event) {
     return ESP_OK;
 }
 
-void wifi_init_sta() {
-    wifi_event_group = xEventGroupCreate();
-
-    tcpip_adapter_init();
-    ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL) );
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    // TODO(awong): Extract to function to create wifi_config_t.
-    wifi_config_t wifi_config;
-    memset(&wifi_config, 0, sizeof(wifi_config));
-    NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
-
-    size_t ssid_len;
-    size_t password_len;
-    esp_err_t err = nvs_get_str(nvs_wifi_config.get(), "ssid", nullptr, &ssid_len);
-    err = nvs_get_str(nvs_wifi_config.get(), "password", nullptr, &password_len);
-    if (err == ESP_OK ||
-        ssid_len > sizeof(wifi_config.sta.ssid) ||
-        password_len > sizeof(wifi_config.sta.password)) {
-      // TODO(awong): Error out here.
-    }
-    nvs_get_str(nvs_wifi_config.get(), "ssid", (char*)&wifi_config.sta.ssid[0], &ssid_len);
-    nvs_get_str(nvs_wifi_config.get(), "password", (char*)&wifi_config.sta.password[0], &password_len);
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
-    ESP_LOGI(TAG, "connect to ap SSID:%s password:%s",
-             wifi_config.sta.ssid, wifi_config.sta.password);
-}
-
-void http_server_netconn_serve(struct netconn *conn) {
-  static hackvac::RouteDescriptor descriptors[] = {
-    {"/h", 2, &hackvac::LedRoute::CreateRoute},
-    {"/l", 2, &hackvac::LedRoute::CreateRoute},
-  };
-
-  hackvac::Router router(conn, &descriptors[0], 2);
+void http_server_netconn_serve(struct netconn *conn,
+                               HttpServerConfig* http_server_config) {
+  hackvac::Router router(conn, http_server_config->descriptors,
+                         http_server_config->num_routes);
   hackvac::RequestProcessor request_processor(&router);
 
   ESP_LOGI(TAG, "starting parse");
@@ -189,6 +150,8 @@ void http_server_netconn_serve(struct netconn *conn) {
 }  // namespace
 
 void http_server_task(void *pvParameters) {
+  HttpServerConfig* http_server_config =
+    static_cast<HttpServerConfig*>(pvParameters);
   struct netconn *conn, *newconn;
   err_t err;
   ESP_LOGI(TAG, "http server task started.");
@@ -200,7 +163,7 @@ void http_server_task(void *pvParameters) {
   do {
      err = netconn_accept(conn, &newconn);
      if (err == ERR_OK) {
-       http_server_netconn_serve(newconn);
+       http_server_netconn_serve(newconn, http_server_config);
        netconn_delete(newconn);
      }
    } while(err == ERR_OK);
@@ -208,15 +171,56 @@ void http_server_task(void *pvParameters) {
    netconn_delete(conn);
 }
 
-void wifi_connect() {
-  // Initialize NVS
-  esp_err_t ret = nvs_flash_init();
-  if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
-    ESP_ERROR_CHECK(nvs_flash_erase());
-    ret = nvs_flash_init();
-  }
-  ESP_ERROR_CHECK(ret);
+bool LoadConfigFromNvs(
+    const char fallback_ssid[], size_t fallback_ssid_len,
+    const char fallback_password[], size_t fallback_password_len,
+    wifi_config_t *wifi_config) {
+  memset(wifi_config, 0, sizeof(wifi_config_t));
 
-  wifi_init_sta();
+  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
+  size_t ssid_len;
+  size_t password_len;
+  if (nvs_get_str(nvs_wifi_config.get(), "ssid", nullptr, &ssid_len) == ESP_OK &&
+      nvs_get_str(nvs_wifi_config.get(), "password", nullptr, &password_len) == ESP_OK &&
+      ssid_len <= sizeof(wifi_config->sta.ssid) &&
+      password_len <= sizeof(wifi_config->sta.password)) {
+    nvs_get_str(nvs_wifi_config.get(), "ssid", (char*)&wifi_config->sta.ssid[0], &ssid_len);
+    nvs_get_str(nvs_wifi_config.get(), "password", (char*)&wifi_config->sta.password[0], &password_len);
+    return true;
+  } else {
+    memcpy(&wifi_config->ap.ssid[0], fallback_ssid, fallback_ssid_len);
+    wifi_config->ap.ssid_len = ssid_len;
+    memcpy(&wifi_config->ap.password[0], fallback_password, fallback_password_len);
+    if (fallback_password_len > 0) {
+      wifi_config->ap.authmode = WIFI_AUTH_WPA2_PSK;
+    }
+    return false;
+  }
+}
+
+void wifi_connect(const wifi_config_t& wifi_config, bool is_station) {
+  wifi_event_group = xEventGroupCreate();
+
+  tcpip_adapter_init();
+  ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL) );
+
+  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+  ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+  if (is_station) {
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA,
+                                        const_cast<wifi_config_t*>(&wifi_config)));
+  } else {
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP) );
+    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP,
+                                        const_cast<wifi_config_t*>(&wifi_config)));
+  }
+  ESP_ERROR_CHECK(esp_wifi_start());
+
+  ESP_LOGI(TAG, "wifi_init finished.");
+  ESP_LOGI(TAG, "%s SSID:%s password:%s",
+           is_station ? "connect to ap" : "created network",
+           wifi_config.sta.ssid, wifi_config.sta.password);
 }
 

@@ -188,12 +188,16 @@ bool LoadConfigFromNvs(
     nvs_get_str(nvs_wifi_config.get(), "password", (char*)&wifi_config->sta.password[0], &password_len);
     return true;
   } else {
+    // TOOD(awong): Assert on size overage.
+    // TODO(awong): Don't forget to set country.
     memcpy(&wifi_config->ap.ssid[0], fallback_ssid, fallback_ssid_len);
     wifi_config->ap.ssid_len = ssid_len;
     memcpy(&wifi_config->ap.password[0], fallback_password, fallback_password_len);
     if (fallback_password_len > 0) {
       wifi_config->ap.authmode = WIFI_AUTH_WPA2_PSK;
     }
+    wifi_config->ap.max_connection = 4;
+    wifi_config->ap.beacon_interval = 100;
     return false;
   }
 }
@@ -217,6 +221,11 @@ void wifi_connect(const wifi_config_t& wifi_config, bool is_station) {
                                         const_cast<wifi_config_t*>(&wifi_config)));
   }
   ESP_ERROR_CHECK(esp_wifi_start());
+
+  if (is_station) {
+    // Run with DHCP server cause there won't be one.
+    ESP_ERROR_CHECK(tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_STA));
+  }
 
   ESP_LOGI(TAG, "wifi_init finished.");
   ESP_LOGI(TAG, "%s SSID:%s password:%s",

@@ -21,7 +21,7 @@
 #include "lwip/api.h"
 #include "lwip/err.h"
 
-static const char TAG[] = "hackvac:web";
+static const char TAG[] = "esphttpd";
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t wifi_event_group;
@@ -96,9 +96,9 @@ esp_err_t event_handler(void *ctx, system_event_t *event) {
 
 void http_server_netconn_serve(struct netconn *conn,
                                HttpServerConfig* http_server_config) {
-  hackvac::Router router(conn, http_server_config->descriptors,
+  esphttpd::Router router(conn, http_server_config->descriptors,
                          http_server_config->num_routes);
-  hackvac::RequestProcessor request_processor(&router);
+  esphttpd::RequestProcessor request_processor(&router);
 
   ESP_LOGI(TAG, "starting parse");
   http_parser parser;

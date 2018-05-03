@@ -7,7 +7,7 @@
 
 namespace {
 
-const char TAG[] = "hackvac:request_processor";
+const char TAG[] = "esphttpd:request_processor";
 
 static bool AppendString(char buf[], size_t* len, const char* addition,
                          size_t addition_len, size_t max_len) {
@@ -22,7 +22,7 @@ static bool AppendString(char buf[], size_t* len, const char* addition,
 
 }  // namespace
 
-namespace hackvac {
+namespace esphttpd {
 
 const http_parser_settings RequestProcessor::parser_settings_ = {
   .on_message_begin = &RequestProcessor::OnMessageBegin,
@@ -240,4 +240,4 @@ int RequestProcessor::OnChunkComplete(http_parser* parser) {
   return -1;
 }
   
-}  // namespace hackvac
+}  // namespace esphttpd

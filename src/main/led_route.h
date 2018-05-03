@@ -7,7 +7,7 @@ struct netconn;
 
 namespace hackvac {
 
-class LedRoute : public Route {
+class LedRoute : public esphttpd::Route {
  public:
   virtual ~LedRoute() = default;
 

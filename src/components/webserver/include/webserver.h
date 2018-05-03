@@ -6,7 +6,7 @@
 #include "esp_wifi.h"
 
 struct HttpServerConfig {
-  hackvac::RouteDescriptor* descriptors;
+  esphttpd::RouteDescriptor* descriptors;
   size_t num_routes;
 };
 void http_server_task(void *pvParameters);

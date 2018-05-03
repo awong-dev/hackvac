@@ -8,7 +8,7 @@
 
 struct netconn;
 
-namespace hackvac {
+namespace esphttpd {
 
 class Route {
  public:
@@ -58,6 +58,6 @@ class Router {
   netconn* conn_;
 };
 
-}  // namespace hackvac
+}  // namespace esphttpd
 
 #endif  // ROUTER_H_

@@ -90,7 +90,7 @@ void cpp_entry() {
 
 //  xTaskCreate(&cn105_control_task, "cn105_control_task", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
 
-  static hackvac::RouteDescriptor descriptors[] = {
+  static esphttpd::RouteDescriptor descriptors[] = {
     {"/h", 2, &hackvac::LedRoute::CreateRoute},
     {"/l", 2, &hackvac::LedRoute::CreateRoute},
   };

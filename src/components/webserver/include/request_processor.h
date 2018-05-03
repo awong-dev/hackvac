@@ -6,7 +6,7 @@
 
 #include "http_parser.h"
 
-namespace hackvac {
+namespace esphttpd {
 
 class Route;
 class Router;
@@ -73,7 +73,7 @@ class RequestProcessor {
     size_t header_value_len_;
 };
 
-}  // namespace hackvac
+}  // namespace esphttpd
 
 #endif  // REQUEST_PROCESSOR_H_
 

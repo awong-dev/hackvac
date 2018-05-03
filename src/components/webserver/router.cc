@@ -2,7 +2,7 @@
 
 #include "esp_log.h"
 
-namespace hackvac {
+namespace esphttpd {
 
 Router::Router(netconn* conn, RouteDescriptor *routes, size_t num_routes)
   : routes_(routes),
@@ -21,4 +21,4 @@ std::unique_ptr<Route> Router::FindRoute(const char* path, size_t path_len) {
   return nullptr;
 }
 
-}  // namespace hackvac
+}  // namespace esphttpd

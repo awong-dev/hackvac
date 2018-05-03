@@ -58,8 +58,8 @@ void Send200(netconn* conn) {
 }  // namespace
 
 // static
-std::unique_ptr<Route> LedRoute::CreateRoute(netconn* conn) {
-  return std::unique_ptr<Route>(new LedRoute(conn));
+std::unique_ptr<esphttpd::Route> LedRoute::CreateRoute(netconn* conn) {
+  return std::unique_ptr<esphttpd::Route>(new LedRoute(conn));
 }
 
 LedRoute::LedRoute(netconn* conn)

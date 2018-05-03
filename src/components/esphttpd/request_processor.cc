@@ -1,9 +1,10 @@
-#include "request_processor.h"
+#include "esphttpd/request_processor.h"
+
+#include "esphttpd/router.h"
 
 #include <string.h>
 #include "esp_log.h"
 
-#include "router.h"
 
 namespace {
 

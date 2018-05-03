@@ -1,5 +1,5 @@
-#ifndef WEBSERVER_H_
-#define WEBSERVER_H_
+#ifndef ESPHTTPD_H_
+#define ESPHTTPD_H_
 
 #include "router.h"
 
@@ -35,4 +35,4 @@ bool LoadConfigFromNvs(
 // Prereq: nvs_flash_init() must have been called.
 void wifi_connect(const wifi_config_t& wifi_config, bool is_station);
 
-#endif  // WEBSERVER_H_
+#endif  // ESPHTTPD_H_

@@ -21,6 +21,9 @@
 #include "lwip/api.h"
 #include "lwip/err.h"
 
+#include "mongoose.h"
+
+
 static const char TAG[] = "esphttpd";
 
 /* FreeRTOS event group to signal when we are connected*/
@@ -147,7 +150,32 @@ void http_server_netconn_serve(struct netconn *conn,
   netconn_close(conn);
 }
 
+void MongooseEventHandler(struct mg_connection *nc,
+					 int event,
+					 void *eventData) {
+  if (event == MG_EV_HTTP_REQUEST) {
+    http_message* message = static_cast<http_message*>(eventData);
+    ESP_LOGI(TAG, "HTTP received: %.*s for %.*s", message->method.len, message->method.p, message->uri.len, message->uri.p);
+    static constexpr char kResp[] = "Hi mom.";
+    mg_send_head(nc, 200, sizeof(kResp), "Content-Type: text/plain");
+    mg_printf(nc, "%s\n", kResp);
+  }
+}
+
 }  // namespace
+
+void mongoose_server_task(void *pvParameters) {
+  HttpServerConfig* http_server_config =
+    static_cast<HttpServerConfig*>(pvParameters);
+
+  struct mg_mgr mgr;
+  mg_mgr_init(&mgr, NULL);
+  struct mg_connection *c = mg_bind(&mgr, ":80", &MongooseEventHandler);
+  mg_set_protocol_http_websocket(c);
+  while(1) {
+    mg_mgr_poll(&mgr, 100000);
+  }
+}
 
 void http_server_task(void *pvParameters) {
   HttpServerConfig* http_server_config =

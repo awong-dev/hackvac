@@ -10,6 +10,7 @@ struct HttpServerConfig {
   size_t num_routes;
 };
 void http_server_task(void *pvParameters);
+void mongoose_server_task(void *pvParameters);
 
 // Initializes a |wifi_config| with the given |ssid| and |password|. If
 // |is_station| is true, attempts to connect to an access point with the

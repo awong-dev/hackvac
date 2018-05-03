@@ -8,8 +8,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "mongoose.h"
-
 #include "esp_system.h"
 #include "esp_spi_flash.h"
 #include "esp_log.h"
@@ -101,7 +99,7 @@ void cpp_entry() {
     descriptors,
     2,  // TODO(awong): Use arraysize.
   };
-  xTaskCreate(&http_server_task, "http_server", 4096, &http_server_config, 2, NULL);
+  xTaskCreate(&mongoose_server_task, "http_server", 4096, &http_server_config, 2, NULL);
 
   // Silly debug tasks.
   xTaskCreate(&blink_task, "blink_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);

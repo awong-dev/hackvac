@@ -15,7 +15,9 @@
 namespace hackvac {
 namespace {
 
-constexpr char TAG[] = "hackvac:wifi";
+constexpr char kTag[] = "hackvac:wifi";
+constexpr char kSsidKey[] = "ssid";
+constexpr char kPasswordKey[] = "password";
 
 /* FreeRTOS event group to signal when we are connected*/
 EventGroupHandle_t g_wifi_event_group;
@@ -28,26 +30,26 @@ constexpr int WIFI_CONNECTED_BIT = BIT0;
 esp_err_t EspEventHandler(void *ctx, system_event_t *event) {
     switch(event->event_id) {
     case SYSTEM_EVENT_STA_START:
-        ESP_LOGI(TAG, "STA_START.");
+        ESP_LOGI(kTag, "STA_START.");
         esp_wifi_connect();
         break;
     case SYSTEM_EVENT_STA_GOT_IP:
-        ESP_LOGI(TAG, "got ip:%s",
+        ESP_LOGI(kTag, "got ip:%s",
                  ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
         xEventGroupSetBits(g_wifi_event_group, WIFI_CONNECTED_BIT);
         break;
     case SYSTEM_EVENT_AP_STACONNECTED:
-        ESP_LOGI(TAG, "station:" MACSTR " join, AID=%d",
+        ESP_LOGI(kTag, "station:" MACSTR " join, AID=%d",
                  MAC2STR(event->event_info.sta_connected.mac),
                  event->event_info.sta_connected.aid);
         break;
     case SYSTEM_EVENT_AP_STADISCONNECTED:
-        ESP_LOGI(TAG, "station:" MACSTR "leave, AID=%d",
+        ESP_LOGI(kTag, "station:" MACSTR "leave, AID=%d",
                  MAC2STR(event->event_info.sta_disconnected.mac),
                  event->event_info.sta_disconnected.aid);
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
-        ESP_LOGI(TAG, "STA_DISCONNECTED. %d", event->event_info.disconnected.reason);
+        ESP_LOGI(kTag, "STA_DISCONNECTED. %d", event->event_info.disconnected.reason);
         esp_wifi_connect();
         xEventGroupClearBits(g_wifi_event_group, WIFI_CONNECTED_BIT);
         break;
@@ -66,15 +68,12 @@ bool LoadConfigFromNvs(
     wifi_config_t *wifi_config) {
   memset(wifi_config, 0, sizeof(wifi_config_t));
 
-  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
-  size_t ssid_len;
-  size_t password_len;
-  if (nvs_get_str(nvs_wifi_config.get(), "ssid", nullptr, &ssid_len) == ESP_OK &&
-      nvs_get_str(nvs_wifi_config.get(), "password", nullptr, &password_len) == ESP_OK &&
-      ssid_len <= sizeof(wifi_config->sta.ssid) &&
-      password_len <= sizeof(wifi_config->sta.password)) {
-    nvs_get_str(nvs_wifi_config.get(), "ssid", (char*)&wifi_config->sta.ssid[0], &ssid_len);
-    nvs_get_str(nvs_wifi_config.get(), "password", (char*)&wifi_config->sta.password[0], &password_len);
+  size_t ssid_len = sizeof(wifi_config->sta.ssid);
+  size_t password_len = sizeof(wifi_config->sta.password);
+  if (GetWifiSsid((char*)&wifi_config->sta.ssid[0], &ssid_len) &&
+      GetWifiPassword((char*)&wifi_config->sta.password[0], &password_len) &&
+      ssid_len > 0 &&
+      password_len > 0) {
     return true;
   } else {
     // TOOD(awong): Assert on size overage.
@@ -116,10 +115,64 @@ void WifiConnect(const wifi_config_t& wifi_config, bool is_station) {
     ESP_ERROR_CHECK(tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_STA));
   }
 
-  ESP_LOGI(TAG, "wifi_init finished.");
-  ESP_LOGI(TAG, "%s SSID:%s password:%s",
+  ESP_LOGI(kTag, "wifi_init finished.");
+  ESP_LOGI(kTag, "%s SSID:%s password:%s",
            is_station ? "connect to ap" : "created network",
            wifi_config.sta.ssid, wifi_config.sta.password);
+}
+
+bool GetWifiSsid(char* ssid, size_t* len) {
+  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
+  size_t stored_len;
+  esp_err_t err = nvs_get_str(nvs_wifi_config.get(), kSsidKey, nullptr, &stored_len);
+  if (err == ESP_OK) {
+    if (stored_len > *len) {
+      return false;
+    }
+    ESP_ERROR_CHECK(nvs_get_str(nvs_wifi_config.get(), kSsidKey, ssid, len));
+  } else if (err == ESP_ERR_NVS_NOT_FOUND) {
+    return false;
+  } else {
+    ESP_ERROR_CHECK(err);
+  }
+  return true;
+}
+
+bool GetWifiPassword(char* password, size_t* len) {
+  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
+  size_t stored_len;
+  esp_err_t err = nvs_get_str(nvs_wifi_config.get(), kPasswordKey, nullptr, &stored_len);
+  if (err == ESP_OK) {
+    if (stored_len > *len) {
+      return false;
+    }
+    ESP_ERROR_CHECK(nvs_get_str(nvs_wifi_config.get(), kPasswordKey, password, len));
+  } else if (err == ESP_ERR_NVS_NOT_FOUND) {
+    return false;
+  } else {
+    ESP_ERROR_CHECK(err);
+  }
+  return true;
+}
+
+void SetWifiSsid(const char* ssid) {
+  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READWRITE);
+  char trimmed_ssid[kSsidBytes];
+
+  strncpy(trimmed_ssid, ssid, sizeof(trimmed_ssid));
+  trimmed_ssid[sizeof(trimmed_ssid) - 1] = '\0';
+
+  ESP_ERROR_CHECK(nvs_set_str(nvs_wifi_config.get(), kSsidKey, trimmed_ssid));
+}
+
+void SetWifiPassword(const char* password) {
+  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READWRITE);
+  char trimmed_password[sizeof(((wifi_config_t*)0)->sta.password)];
+
+  strncpy(trimmed_password, password, sizeof(trimmed_password));
+  trimmed_password[sizeof(trimmed_password) - 1] = '\0';
+
+  ESP_ERROR_CHECK(nvs_set_str(nvs_wifi_config.get(), kPasswordKey, trimmed_password));
 }
 
 }  // namespace hackvac

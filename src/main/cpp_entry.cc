@@ -2,8 +2,8 @@
 
 #include "constants.h"
 #include "cn105.h"
-#include "esphttpd/esphttpd.h"
-#include "led_route.h"
+#include "httpd.h"
+#include "wifi.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -15,11 +15,6 @@
 #include "nvs_flash.h"
 
 #include "driver/gpio.h"
-
-#ifndef CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY
-#error
-#endif
-
 
 static const char *TAG = "hackvac";
 
@@ -65,6 +60,7 @@ static void dump_chip_info() {
 }
 
 void cpp_entry() {
+  using namespace hackvac;  // TODO(awong): Remove this.
   dump_chip_info();
 
   // Initialize NVS
@@ -82,24 +78,14 @@ void cpp_entry() {
                                      kFallbackPassword, sizeof(kFallbackPassword),
                                      &wifi_config);
 
-  wifi_connect(wifi_config, is_staion);
+  WifiConnect(wifi_config, is_staion);
 
   static hackvac::Controller controller;
   controller.Init();
 
-
 //  xTaskCreate(&cn105_control_task, "cn105_control_task", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
 
-  static esphttpd::RouteDescriptor descriptors[] = {
-    {"/h", 2, &hackvac::LedRoute::CreateRoute},
-    {"/l", 2, &hackvac::LedRoute::CreateRoute},
-  };
-
-  HttpServerConfig http_server_config = {
-    descriptors,
-    2,  // TODO(awong): Use arraysize.
-  };
-  xTaskCreate(&mongoose_server_task, "http_server", 4096, &http_server_config, 2, NULL);
+  xTaskCreate(&HttpdTask, "httpd", 4096, NULL, 2, NULL);
 
   // Silly debug tasks.
   xTaskCreate(&blink_task, "blink_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);

@@ -110,7 +110,7 @@ void WifiConnect(const wifi_config_t& wifi_config, bool is_station) {
   }
   ESP_ERROR_CHECK(esp_wifi_start());
 
-  if (is_station) {
+  if (!is_station) {
     // Run with DHCP server cause there won't be one.
     ESP_ERROR_CHECK(tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_STA));
   }
@@ -130,7 +130,9 @@ bool GetWifiSsid(char* ssid, size_t* len) {
       return false;
     }
     ESP_ERROR_CHECK(nvs_get_str(nvs_wifi_config.get(), kSsidKey, ssid, len));
-  } else if (err == ESP_ERR_NVS_NOT_FOUND) {
+  } else if (err == ESP_ERR_NVS_NOT_FOUND ||
+             err == ESP_ERR_NVS_INVALID_HANDLE) {
+    // ESP_ERR_NVS_INVALID_HANDLE occurs if namespace has never been written.
     return false;
   } else {
     ESP_ERROR_CHECK(err);
@@ -147,7 +149,9 @@ bool GetWifiPassword(char* password, size_t* len) {
       return false;
     }
     ESP_ERROR_CHECK(nvs_get_str(nvs_wifi_config.get(), kPasswordKey, password, len));
-  } else if (err == ESP_ERR_NVS_NOT_FOUND) {
+  } else if (err == ESP_ERR_NVS_NOT_FOUND ||
+             err == ESP_ERR_NVS_INVALID_HANDLE) {
+    // ESP_ERR_NVS_INVALID_HANDLE occurs if namespace has never been written.
     return false;
   } else {
     ESP_ERROR_CHECK(err);

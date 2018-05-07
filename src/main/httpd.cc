@@ -107,18 +107,25 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
       if (num_tokens < 0) {
         return "Invalid JSON";
       }
+      ESP_LOGI(kTag, "Num tokens found %d", num_tokens);
 
       static constexpr char kExpectedJson[] =
         "Expected format: { 'ssid': 'abc', 'password': '123' }";
       if (tokens[0].type != JSMN_OBJECT ||
-          tokens[0].size != 4) {
+          tokens[0].size != 2) {
+        ESP_LOGI(kTag, "Expected object with 2 children. Got type %d children %d",
+                 tokens[0].type, tokens[0].size);
         return kExpectedJson;
       }
 
-      // Then verify strings and read them.
-      for (int i = 1; i <= tokens[0].size; ++i) {
-        if (tokens[i].type != JSMN_STRING ||
-            tokens[i].size != 0) {
+      // All other tokens should be strings and be structured as pairs.
+      for (int i = 0; i < tokens[0].size; i++) {
+        int field_start = 1 + 2*i;
+        if (tokens[field_start].type != JSMN_STRING ||
+            tokens[field_start].size != 1 ||
+            tokens[field_start + 1].type != JSMN_STRING ||
+            tokens[field_start + 1].size != 0) {
+          ESP_LOGW(kTag, "Error at field %d", i);
           return kExpectedJson;
         }
       }
@@ -142,7 +149,7 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
           return false;
         }
         memcpy(ssid, value.p, value.len);
-        ssid[31] = '\0';
+        ssid[value.len] = '\0';
         SetWifiSsid(ssid);
       }
 
@@ -154,7 +161,7 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
           return false;
         }
         memcpy(password, value.p, value.len);
-        password[39] = '\0';
+        password[value.len] = '\0';
         SetWifiPassword(password);
       }
 
@@ -162,13 +169,14 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
     }
   };
 
-  if (mg_vcmp(&hm->method, "GET")) {
+  if (mg_vcmp(&hm->method, "GET") == 0) {
     static constexpr mg_str kConfigStart = MG_MK_STR("{ 'ssid': '");
     static constexpr mg_str kConfigMid = MG_MK_STR("', 'password': '");
     static constexpr mg_str kConfigEnd = MG_MK_STR("' }");
     char ssid[kSsidBytes];
     size_t ssid_len = sizeof(ssid);
     char password[kPasswordBytes];
+    // TODO(awong): These ssid_len and password_len include null terminator.
     size_t password_len = sizeof(password);
     if (!GetWifiSsid(&ssid[0], &ssid_len)) {
       constexpr char kNotSet[] = "(not set)";
@@ -189,7 +197,7 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
     mg_send(nc, kConfigMid.p, kConfigMid.len);
     mg_send(nc, password, password_len);
     mg_send(nc, kConfigEnd.p, kConfigEnd.len);
-  } else if (mg_vcmp(&hm->method, "POST")) {
+  } else if (mg_vcmp(&hm->method, "POST") == 0) {
     const char* error = WifiConfig::HandlePost(hm->body);
     if (error == nullptr) {
       mg_send_head(nc, 200, kEmptyJson.len, "Content-Type: application/json");

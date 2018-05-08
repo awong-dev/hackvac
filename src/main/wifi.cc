@@ -72,8 +72,8 @@ bool LoadConfigFromNvs(
   size_t password_len = sizeof(wifi_config->sta.password);
   if (GetWifiSsid((char*)&wifi_config->sta.ssid[0], &ssid_len) &&
       GetWifiPassword((char*)&wifi_config->sta.password[0], &password_len) &&
-      ssid_len > 0 &&
-      password_len > 0) {
+      ssid_len > 1 &&
+      password_len > 1) {
     return true;
   } else {
     // TOOD(awong): Assert on size overage.

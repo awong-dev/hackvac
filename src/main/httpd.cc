@@ -176,17 +176,20 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
     char ssid[kSsidBytes];
     size_t ssid_len = sizeof(ssid);
     char password[kPasswordBytes];
-    // TODO(awong): These ssid_len and password_len include null terminator.
     size_t password_len = sizeof(password);
     if (!GetWifiSsid(&ssid[0], &ssid_len)) {
       constexpr char kNotSet[] = "(not set)";
       strcpy(ssid, kNotSet);
       ssid_len = strlen(kNotSet);
+    } else {
+      ssid_len--;  // null terminator.
     }
     if (!GetWifiPassword(&password[0], &password_len)) {
       constexpr char kNotSet[] = "(not set)";
       strcpy(password, kNotSet);
       password_len = strlen(kNotSet);
+    } else {
+      password_len--;  // null terminator.
     }
     mg_send_head(nc, 200,
                  kConfigStart.len + ssid_len + kConfigMid.len +

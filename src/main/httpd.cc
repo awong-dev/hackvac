@@ -2,6 +2,7 @@
 
 #include "constants.h"
 #include "esp_log.h"
+#include "esp_ota_ops.h"
 #include "jsmn.h"
 #include "mbedtls/md5.h"
 #include "mongoose.h"
@@ -40,7 +41,7 @@ constexpr char kIndexHtml[] = R"(<!DOCTYPE html>
     html, body, iframe { margin: 0; padding: 0; height: 100%; }
     iframe { display: block; width: 100%; border: none; }
   </style>
-<title>HELLO ESP32</title>
+<title>HELLO ESP32! Now with OTA!</title>
 </head>
 <body>
 <h1>Hello World, from ESP32!</h1>
@@ -252,27 +253,30 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
 void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
   bool is_response_sent = false;
 
-  struct MultipartContext {
-    MultipartContext() : has_expected_md5(false) {
+  struct OtaContext {
+    OtaContext() : has_expected_md5(false), update_partition(nullptr), out_handle(-1) {
       mbedtls_md5_init(&md5_ctx);
       memset(&actual_md5[0], 0xcd, sizeof(actual_md5));
       memset(&expected_md5[0], 0x34, sizeof(expected_md5));
     }
+
     unsigned char expected_md5[16];
     bool has_expected_md5;
     unsigned char actual_md5[16];
     mbedtls_md5_context md5_ctx;
+    const esp_partition_t* update_partition;
+    esp_ota_handle_t out_handle;
   };
 
   switch (event) {
     case MG_EV_HTTP_MULTIPART_REQUEST: {
       ESP_LOGD(kTag, "firmware upload starting");
-      nc->user_data = new MultipartContext();
+      nc->user_data = new OtaContext();
       break;
     }
     case MG_EV_HTTP_PART_BEGIN: {
-      MultipartContext* context =
-        static_cast<MultipartContext*>(nc->user_data);
+      OtaContext* context =
+        static_cast<OtaContext*>(nc->user_data);
       if (!context) return;
 
       mg_http_multipart_part* multipart =
@@ -280,12 +284,15 @@ void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
       ESP_LOGI(kTag, "Starting multipart: %s", multipart->var_name);
       if (strcmp("firmware", multipart->var_name) == 0) {
         mbedtls_md5_starts(&context->md5_ctx);
+        context->update_partition = esp_ota_get_next_update_partition(NULL);
+        ESP_ERROR_CHECK(esp_ota_begin(context->update_partition,
+                                      OTA_SIZE_UNKNOWN, &context->out_handle));
       }
       break;
     }
     case MG_EV_HTTP_PART_DATA: {
-      MultipartContext* context =
-        static_cast<MultipartContext*>(nc->user_data);
+      OtaContext* context =
+        static_cast<OtaContext*>(nc->user_data);
       if (!context) return;
 
       mg_http_multipart_part* multipart =
@@ -317,17 +324,22 @@ void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
         }
       } else if (strcmp("firmware", multipart->var_name) == 0) {
           // This is the firmware blob. Write it! And hash it.
-          mbedtls_md5_update(&context->md5_ctx, reinterpret_cast<const unsigned char*>(multipart->data.p), multipart->data.len); 
-          // TODO(awong): Write the OTA here.
+          mbedtls_md5_update(&context->md5_ctx,
+                             reinterpret_cast<const unsigned char*>(
+                                 multipart->data.p),
+                             multipart->data.len); 
+          ESP_ERROR_CHECK(esp_ota_write(context->out_handle,
+                                        multipart->data.p,
+                                        multipart->data.len));
       }
       break;
     }
     case MG_EV_HTTP_PART_END: {
-      MultipartContext* context = static_cast<MultipartContext*>(nc->user_data);
+      OtaContext* context = static_cast<OtaContext*>(nc->user_data);
       if (!context) return;
       mg_http_multipart_part* multipart =
           static_cast<mg_http_multipart_part*>(ev_data);
-      ESP_LOGI(kTag, "Ending multipart %.*s: %s", multipart->data.len, multipart->data.p, multipart->var_name);
+      ESP_LOGI(kTag, "Ending multipart: %s", multipart->var_name);
       if (strcmp("firmware", multipart->var_name) == 0) {
         mbedtls_md5_finish(&context->md5_ctx, &context->actual_md5[0]);
         mbedtls_md5_free(&context->md5_ctx);
@@ -336,7 +348,7 @@ void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
     }
     case MG_EV_HTTP_MULTIPART_REQUEST_END: {
       ESP_LOGI(kTag, "Flashing done");
-      MultipartContext* context = static_cast<MultipartContext*>(nc->user_data);
+      OtaContext* context = static_cast<OtaContext*>(nc->user_data);
       if (!context) return;
 
       int status = 400;
@@ -344,6 +356,14 @@ void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
           memcmp(&context->actual_md5[0], &context->expected_md5[0],
                  sizeof(context->actual_md5)) == 0) {
         status = 200;
+        
+        ESP_LOGI(kTag, "Setting new OTA to boot.");
+        ESP_ERROR_CHECK(esp_ota_end(context->out_handle));
+        ESP_ERROR_CHECK(esp_ota_set_boot_partition(context->update_partition));
+
+        // TODO(awong): This should call a shutdown hook.
+        ESP_LOGI(kTag, "Prepare to restart system!");
+        esp_restart();
       }
       // Yay! All good!
       static constexpr char kFirmwareSuccess[] = "uploaded firmware md5: ";
@@ -369,7 +389,7 @@ abort_request:
 
   if (is_response_sent) {
     ESP_LOGD(kTag, "Response sent. Cleaning up.");
-    MultipartContext* context = static_cast<MultipartContext*>(nc->user_data);
+    OtaContext* context = static_cast<OtaContext*>(nc->user_data);
     delete context;
     nc->user_data = nullptr;
     nc->flags |= MG_F_SEND_AND_CLOSE;

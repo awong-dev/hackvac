@@ -3,8 +3,11 @@
 #include "constants.h"
 #include "esp_log.h"
 #include "jsmn.h"
+#include "mbedtls/md5.h"
 #include "mongoose.h"
 #include "wifi.h"
+
+#include <ctype.h>
 
 namespace hackvac {
 namespace {
@@ -29,20 +32,49 @@ constexpr char k404Html[] = "<!DOCTYPE html>"
       "</body>\n"
       "</html>\n";
 
-constexpr char kIndexHtml[] = "<!DOCTYPE html>"
-      "<html>\n"
-      "<head>\n"
-      "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
-      "  <style type=\"text/css\">\n"
-      "    html, body, iframe { margin: 0; padding: 0; height: 100%; }\n"
-      "    iframe { display: block; width: 100%; border: none; }\n"
-      "  </style>\n"
-      "<title>HELLO ESP32</title>\n"
-      "</head>\n"
-      "<body>\n"
-      "<h1>Hello World, from ESP32!</h1>\n"
-      "</body>\n"
-      "</html>\n";
+constexpr char kIndexHtml[] = R"(<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style type="text/css">
+    html, body, iframe { margin: 0; padding: 0; height: 100%; }
+    iframe { display: block; width: 100%; border: none; }
+  </style>
+<title>HELLO ESP32</title>
+</head>
+<body>
+<h1>Hello World, from ESP32!</h1>
+<form action="/api/firmware" method="post" enctype="multipart/form-data">
+  <input type="file" name="firmware">
+  <input type="text" name="md5">
+  <input type="submit">
+</form>
+</body>
+</html>)";
+
+bool hex_digit(const char input[], unsigned char *val) {
+  if (isdigit(input[0])) {
+    *val = input[0] - '0';
+  } else if ('a' <= input[0] && input[0] <= 'f') {
+    *val = 10 + input[0] - 'a';
+  } else if ('A' <= input[0] && input[0] <= 'F') {
+    *val = 10 + input[0] - 'A';
+  } else {
+    return false;
+  }
+  *val <<= 4;
+  if (isdigit(input[1])) {
+    *val |= input[1] - '0';
+  } else if ('a' <= input[1] && input[1] <= 'f') {
+    *val |= 10 + input[1] - 'a';
+  } else if ('A' <= input[1] && input[1] <= 'F') {
+    *val |= 10 + input[0] - 'A';
+  } else {
+    return false;
+  }
+
+  return true;
+}
 
 mg_str TokenToMgStr(mg_str data, const jsmntok_t& token) {
   mg_str str;
@@ -54,11 +86,11 @@ mg_str TokenToMgStr(mg_str data, const jsmntok_t& token) {
 void MongooseEventHandler(struct mg_connection *nc,
 					 int event,
 					 void *eventData) {
-  ESP_LOGI(kTag, "Event %d", event);
+//  ESP_LOGI(kTag, "Event %d", event);
   if (event == MG_EV_HTTP_REQUEST) {
     http_message* message = static_cast<http_message*>(eventData);
     ESP_LOGI(kTag, "HTTP received: %.*s for %.*s", message->method.len, message->method.p, message->uri.len, message->uri.p);
-    mg_send_head(nc, 404, sizeof(k404Html), "Content-Type: text/html");
+    mg_send_head(nc, 404, strlen(k404Html), "Content-Type: text/html");
     mg_send(nc, k404Html, strlen(k404Html));
   }
 }
@@ -67,7 +99,7 @@ void HandleLedOn(mg_connection* nc, int event, void *ev_data) {
   ESP_LOGD(kTag, "Light on");
   gpio_set_level(BLINK_GPIO, 1);
 
-  mg_send_head(nc, 200, sizeof(kIndexHtml), "Content-Type: text/html");
+  mg_send_head(nc, 200, strlen(kIndexHtml), "Content-Type: text/html");
   mg_send(nc, kIndexHtml, strlen(kIndexHtml));
   nc->flags |= MG_F_SEND_AND_CLOSE;
 }
@@ -76,7 +108,7 @@ void HandleLedOff(mg_connection *nc, int event, void *ev_data) {
   ESP_LOGD(kTag, "Light off");
   gpio_set_level(BLINK_GPIO, 0);
 
-  mg_send_head(nc, 200, sizeof(kIndexHtml), "Content-Type: text/html");
+  mg_send_head(nc, 200, strlen(kIndexHtml), "Content-Type: text/html");
   mg_send(nc, kIndexHtml, strlen(kIndexHtml));
   nc->flags |= MG_F_SEND_AND_CLOSE;
 }
@@ -84,7 +116,7 @@ void HandleLedOff(mg_connection *nc, int event, void *ev_data) {
 void HandleIndex(mg_connection *nc, int event, void *ev_data) {
   ESP_LOGD(kTag, "Index");
 
-  mg_send_head(nc, 200, sizeof(kIndexHtml), "Content-Type: text/html");
+  mg_send_head(nc, 200, strlen(kIndexHtml), "Content-Type: text/html");
   mg_send(nc, kIndexHtml, strlen(kIndexHtml));
   nc->flags |= MG_F_SEND_AND_CLOSE;
 }
@@ -217,6 +249,132 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
 
   nc->flags |= MG_F_SEND_AND_CLOSE;
 }
+void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
+  bool is_response_sent = false;
+
+  struct MultipartContext {
+    MultipartContext() : has_expected_md5(false) {
+      mbedtls_md5_init(&md5_ctx);
+      memset(&actual_md5[0], 0xcd, sizeof(actual_md5));
+      memset(&expected_md5[0], 0x34, sizeof(expected_md5));
+    }
+    unsigned char expected_md5[16];
+    bool has_expected_md5;
+    unsigned char actual_md5[16];
+    mbedtls_md5_context md5_ctx;
+  };
+
+  switch (event) {
+    case MG_EV_HTTP_MULTIPART_REQUEST: {
+      ESP_LOGD(kTag, "firmware upload starting");
+      nc->user_data = new MultipartContext();
+      break;
+    }
+    case MG_EV_HTTP_PART_BEGIN: {
+      MultipartContext* context =
+        static_cast<MultipartContext*>(nc->user_data);
+      if (!context) return;
+
+      mg_http_multipart_part* multipart =
+        static_cast<mg_http_multipart_part*>(ev_data);
+      ESP_LOGI(kTag, "Starting multipart: %s", multipart->var_name);
+      if (strcmp("firmware", multipart->var_name) == 0) {
+        mbedtls_md5_starts(&context->md5_ctx);
+      }
+      break;
+    }
+    case MG_EV_HTTP_PART_DATA: {
+      MultipartContext* context =
+        static_cast<MultipartContext*>(nc->user_data);
+      if (!context) return;
+
+      mg_http_multipart_part* multipart =
+        static_cast<mg_http_multipart_part*>(ev_data);
+
+      if (strcmp("md5", multipart->var_name) == 0 &&
+          multipart->data.len != 0) {
+        static constexpr char kExpectsMd5[] =
+          "Expecting md5 field to be 32-digit hex string";
+        // Reading the md5 checksum. Data should be 32 hex digits.
+        if (multipart->data.len != 32) {
+          is_response_sent = true;
+          mg_send_head(nc, 400, strlen(kExpectsMd5),
+                       "Content-Type: text/plain");
+          mg_send(nc, kExpectsMd5, strlen(kExpectsMd5));
+          goto abort_request;
+        }
+
+        ESP_LOGI(kTag, "Read md5");
+        context->has_expected_md5 = true;
+        for (int i = 0; i < sizeof(context->expected_md5); i++) {
+          if (!hex_digit(multipart->data.p + i*2, &context->expected_md5[i])) {
+            is_response_sent = true;
+            mg_send_head(nc, 400, strlen(kExpectsMd5),
+                         "Content-Type: text/plain");
+            mg_send(nc, kExpectsMd5, strlen(kExpectsMd5));
+            goto abort_request;
+          }
+        }
+      } else if (strcmp("firmware", multipart->var_name) == 0) {
+          // This is the firmware blob. Write it! And hash it.
+          mbedtls_md5_update(&context->md5_ctx, reinterpret_cast<const unsigned char*>(multipart->data.p), multipart->data.len); 
+          // TODO(awong): Write the OTA here.
+      }
+      break;
+    }
+    case MG_EV_HTTP_PART_END: {
+      MultipartContext* context = static_cast<MultipartContext*>(nc->user_data);
+      if (!context) return;
+      mg_http_multipart_part* multipart =
+          static_cast<mg_http_multipart_part*>(ev_data);
+      ESP_LOGI(kTag, "Ending multipart %.*s: %s", multipart->data.len, multipart->data.p, multipart->var_name);
+      if (strcmp("firmware", multipart->var_name) == 0) {
+        mbedtls_md5_finish(&context->md5_ctx, &context->actual_md5[0]);
+        mbedtls_md5_free(&context->md5_ctx);
+      }
+      break;
+    }
+    case MG_EV_HTTP_MULTIPART_REQUEST_END: {
+      ESP_LOGI(kTag, "Flashing done");
+      MultipartContext* context = static_cast<MultipartContext*>(nc->user_data);
+      if (!context) return;
+
+      int status = 400;
+      if (context->has_expected_md5 &&
+          memcmp(&context->actual_md5[0], &context->expected_md5[0],
+                 sizeof(context->actual_md5)) == 0) {
+        status = 200;
+      }
+      // Yay! All good!
+      static constexpr char kFirmwareSuccess[] = "uploaded firmware md5: ";
+      mg_send_head(nc, status, strlen(kFirmwareSuccess) + 32,
+                   "Content-Type: text/plain");
+      mg_send(nc, kFirmwareSuccess, strlen(kFirmwareSuccess));
+      for (int i = 0; i < sizeof(context->actual_md5); ++i) {
+        mg_printf(nc, "%02x", context->actual_md5[i]);
+      }
+      is_response_sent = true;
+      break;
+    }
+    default:
+      static constexpr char kExpectsFileUpload[] =
+        "Expecting http multi-part file upload";
+      mg_send_head(nc, 400, strlen(kExpectsFileUpload),
+                   "Content-Type: text/plain");
+      mg_send(nc, kExpectsFileUpload, strlen(kExpectsFileUpload));
+      is_response_sent = true;
+      break;
+  }
+abort_request:
+
+  if (is_response_sent) {
+    ESP_LOGD(kTag, "Response sent. Cleaning up.");
+    MultipartContext* context = static_cast<MultipartContext*>(nc->user_data);
+    delete context;
+    nc->user_data = nullptr;
+    nc->flags |= MG_F_SEND_AND_CLOSE;
+  }
+}
 
 }  // namespace
 
@@ -230,6 +388,7 @@ void HttpdTask(void *pvParameters) {
   mg_register_http_endpoint(c, "/led_off", &HandleLedOff);
   mg_register_http_endpoint(c, "/", &HandleIndex);
   mg_register_http_endpoint(c, "/api/wificonfig", &HandleWifiConfig);
+  mg_register_http_endpoint(c, "/api/firmware", &HandleFirmware);
 
   while(1) {
     mg_mgr_poll(&mgr, 10000);

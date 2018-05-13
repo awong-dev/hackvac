@@ -3,6 +3,7 @@
 #include "constants.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#include "event_log.h"
 #include "jsmn.h"
 #include "mbedtls/md5.h"
 #include "mongoose.h"
@@ -10,14 +11,15 @@
 
 #include <ctype.h>
 
+// User 1 and 2 are used by the SOCKS code.
+#define RECEIVES_EVENT_LOG MG_F_USER_3
+
 namespace hackvac {
 namespace {
 
 constexpr char kTag[] = "hackvac:httpd";
 
 constexpr mg_str kEmptyJson = MG_MK_STR("{}");
-constexpr mg_str kErrorStart = MG_MK_STR("{ 'error': '");
-constexpr mg_str kErrorEnd = MG_MK_STR("' }");
 constexpr char k404Html[] = "<!DOCTYPE html>"
       "<html>\n"
       "<head>\n"
@@ -53,6 +55,8 @@ constexpr char kIndexHtml[] = R"(<!DOCTYPE html>
 </body>
 </html>)";
 
+mg_mgr g_mgr;
+
 bool hex_digit(const char input[], unsigned char *val) {
   if (isdigit(input[0])) {
     *val = input[0] - '0';
@@ -75,6 +79,18 @@ bool hex_digit(const char input[], unsigned char *val) {
   }
 
   return true;
+}
+
+void SendResultJson(mg_connection* nc, int status, const char* msg) {
+  size_t len = strlen(msg);
+  static constexpr mg_str kSuccessJsonStart = MG_MK_STR("{ 'result': '");
+  static constexpr mg_str kSuccessJsonEnd = MG_MK_STR("' }");
+
+  mg_send_head(nc, status, kSuccessJsonStart.len + len + kSuccessJsonEnd.len,
+               "Content-Type: application/json");
+  mg_send(nc, kSuccessJsonStart.p, kSuccessJsonStart.len);
+  mg_send(nc, msg, len);
+  mg_send(nc, kSuccessJsonEnd.p, kSuccessJsonEnd.len);
 }
 
 mg_str TokenToMgStr(mg_str data, const jsmntok_t& token) {
@@ -236,20 +252,15 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
   } else if (mg_vcmp(&hm->method, "POST") == 0) {
     const char* error = WifiConfig::HandlePost(hm->body);
     if (error == nullptr) {
-      mg_send_head(nc, 200, kEmptyJson.len, "Content-Type: application/json");
-      mg_send(nc, kEmptyJson.p, kEmptyJson.len);
+      SendResultJson(nc, 200, "");
     } else {
-      size_t len = strlen(error);
-      mg_send_head(nc, 400, kErrorStart.len + len + kErrorEnd.len,
-                   "Content-Type: application/json");
-      mg_send(nc, kErrorStart.p, kErrorStart.len);
-      mg_send(nc, error, len);
-      mg_send(nc, kErrorEnd.p, kErrorEnd.len);
+      SendResultJson(nc, 400, error);
     }
   }
 
   nc->flags |= MG_F_SEND_AND_CLOSE;
 }
+
 void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
   bool is_response_sent = false;
 
@@ -396,23 +407,65 @@ abort_request:
   }
 }
 
+void HandleEventsStream(mg_connection *nc, int event, void *ev_data) {
+  switch (event) {
+    case MG_EV_WEBSOCKET_HANDSHAKE_DONE: {
+      static constexpr char kEventHello[] = "{ 'data': 'Hello' }";
+      mg_send_websocket_frame(nc, WEBSOCKET_OP_TEXT, kEventHello,
+                              strlen(kEventHello));
+      nc->flags |= RECEIVES_EVENT_LOG;
+      IncrementListeners();
+      break;
+    }
+    case MG_EV_CLOSE:
+      DecrementListeners();
+      break;
+
+    case MG_EV_WEBSOCKET_HANDSHAKE_REQUEST:
+    case MG_EV_WEBSOCKET_FRAME:
+    default:
+      // Ignore these.
+      break;
+      break;
+  }
+}
+
+void HandleBroadcast(mg_connection* nc, int ev, void* ev_data) {
+  switch (ev) {
+    case MG_EV_POLL:
+      if (nc->flags & RECEIVES_EVENT_LOG) {
+        // Write a frame here.
+        size_t len = strlen(static_cast<const char*>(ev_data));
+        mg_send_websocket_frame(nc, WEBSOCKET_OP_TEXT, ev_data, len);
+      }
+      break;
+
+    default:
+      break;
+  }
+}
+
 }  // namespace
 
 void HttpdTask(void *pvParameters) {
-  mg_mgr mgr;
-  mg_mgr_init(&mgr, NULL);
-  mg_connection *c = mg_bind(&mgr, ":80", &MongooseEventHandler);
+  mg_mgr_init(&g_mgr, NULL); // TODO(awong): Move this into its own init.
+  mg_connection *c = mg_bind(&g_mgr, ":80", &MongooseEventHandler);
 
   mg_set_protocol_http_websocket(c);
   mg_register_http_endpoint(c, "/led_on", &HandleLedOn);
   mg_register_http_endpoint(c, "/led_off", &HandleLedOff);
   mg_register_http_endpoint(c, "/", &HandleIndex);
-  mg_register_http_endpoint(c, "/api/wificonfig", &HandleWifiConfig);
   mg_register_http_endpoint(c, "/api/firmware", &HandleFirmware);
+  mg_register_http_endpoint(c, "/api/wificonfig", &HandleWifiConfig);
+  mg_register_http_endpoint(c, "/api/events", &HandleEventsStream);
 
   while(1) {
-    mg_mgr_poll(&mgr, 10000);
+    mg_mgr_poll(&g_mgr, 10000);
   }
+}
+
+void HttpdPublishEvent(void* data, size_t len) {
+  mg_broadcast(&g_mgr, &HandleBroadcast, data, len);
 }
 
 }  // namespace hackvac

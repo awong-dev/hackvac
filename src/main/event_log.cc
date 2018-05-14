@@ -78,7 +78,7 @@ void DecrementListeners() {
 void EventLogInit() {
   g_log_events = xRingbufferCreate(kLogEventsSize, RINGBUF_TYPE_NOSPLIT);
   g_protocol_events = xRingbufferCreate(kProtocolEventsSize, RINGBUF_TYPE_NOSPLIT);
-  g_original_logger = esp_log_set_vprintf(&LogHook);
+  //g_original_logger = esp_log_set_vprintf(&LogHook);
   // TODO(awong): Look at xtensa_config.h for stack size.
   TaskHandle_t publish_task = nullptr;
   xTaskCreate(&EventLogPublishTask, "event_log_publish", 4096, NULL, 2, &publish_task);

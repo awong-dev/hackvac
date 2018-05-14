@@ -112,7 +112,7 @@ void WifiConnect(const wifi_config_t& wifi_config, bool is_station) {
 
   if (!is_station) {
     // Run with DHCP server cause there won't be one.
-    ESP_ERROR_CHECK(tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_STA));
+    ESP_ERROR_CHECK(tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_AP));
   }
 
   ESP_LOGI(kTag, "wifi_init finished.");

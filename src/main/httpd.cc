@@ -14,46 +14,21 @@
 // User 1 and 2 are used by the SOCKS code.
 #define RECEIVES_EVENT_LOG MG_F_USER_3
 
+#define HTML_DECL(name) \
+  extern "C" const uint8_t name##_start[] asm("_binary_" #name "_start"); \
+  extern "C" const uint8_t name##_end[] asm("_binary_" #name "_end");
+#define HTML_LEN(name) (&name##_end[0] - &name##_start[0] - 1)
+#define HTML_CONTENTS(name) (&name##_start[0])
+
+HTML_DECL(resp404_html);
+HTML_DECL(index_html);
+
 namespace hackvac {
 namespace {
 
 constexpr char kTag[] = "hackvac:httpd";
 
 constexpr mg_str kEmptyJson = MG_MK_STR("{}");
-constexpr char k404Html[] = "<!DOCTYPE html>"
-      "<html>\n"
-      "<head>\n"
-      "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
-      "  <style type=\"text/css\">\n"
-      "    html, body, iframe { margin: 0; padding: 0; height: 100%; }\n"
-      "    iframe { display: block; width: 100%; border: none; }\n"
-      "  </style>\n"
-      "<title>404 ESP32</title>\n"
-      "</head>\n"
-      "<body>\n"
-      "<h1>404, from ESP32!</h1>\n"
-      "</body>\n"
-      "</html>\n";
-
-constexpr char kIndexHtml[] = R"(<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style type="text/css">
-    html, body, iframe { margin: 0; padding: 0; height: 100%; }
-    iframe { display: block; width: 100%; border: none; }
-  </style>
-<title>HELLO ESP32! Now with OTA!</title>
-</head>
-<body>
-<h1>Hello World, from ESP32!</h1>
-<form action="/api/firmware" method="post" enctype="multipart/form-data">
-  <input type="file" name="firmware">
-  <input type="text" name="md5">
-  <input type="submit">
-</form>
-</body>
-</html>)";
 
 mg_mgr g_mgr;
 
@@ -103,43 +78,43 @@ mg_str TokenToMgStr(mg_str data, const jsmntok_t& token) {
 void MongooseEventHandler(struct mg_connection *nc,
 					 int event,
 					 void *eventData) {
-//  ESP_LOGI(kTag, "Event %d", event);
+  ESP_LOGI(kTag, "Event %d", event);
   if (event == MG_EV_HTTP_REQUEST) {
     http_message* message = static_cast<http_message*>(eventData);
     ESP_LOGI(kTag, "HTTP received: %.*s for %.*s", message->method.len, message->method.p, message->uri.len, message->uri.p);
-    mg_send_head(nc, 404, strlen(k404Html), "Content-Type: text/html");
-    mg_send(nc, k404Html, strlen(k404Html));
+    mg_send_head(nc, 404, HTML_LEN(resp404_html), "Content-Type: text/html");
+    mg_send(nc, HTML_CONTENTS(resp404_html), HTML_LEN(resp404_html));
   }
 }
 
 void HandleLedOn(mg_connection* nc, int event, void *ev_data) {
-  ESP_LOGD(kTag, "Light on");
+  ESP_LOGI(kTag, "Light on");
   gpio_set_level(BLINK_GPIO, 1);
 
-  mg_send_head(nc, 200, strlen(kIndexHtml), "Content-Type: text/html");
-  mg_send(nc, kIndexHtml, strlen(kIndexHtml));
+  mg_send_head(nc, 200, HTML_LEN(index_html), "Content-Type: text/html");
+  mg_send(nc, HTML_CONTENTS(index_html), HTML_LEN(index_html));
   nc->flags |= MG_F_SEND_AND_CLOSE;
 }
 
 void HandleLedOff(mg_connection *nc, int event, void *ev_data) {
-  ESP_LOGD(kTag, "Light off");
+  ESP_LOGI(kTag, "Light off");
   gpio_set_level(BLINK_GPIO, 0);
 
-  mg_send_head(nc, 200, strlen(kIndexHtml), "Content-Type: text/html");
-  mg_send(nc, kIndexHtml, strlen(kIndexHtml));
+  mg_send_head(nc, 200, HTML_LEN(index_html), "Content-Type: text/html");
+  mg_send(nc, HTML_CONTENTS(index_html), HTML_LEN(index_html));
   nc->flags |= MG_F_SEND_AND_CLOSE;
 }
 
 void HandleIndex(mg_connection *nc, int event, void *ev_data) {
-  ESP_LOGD(kTag, "Index");
+  ESP_LOGI(kTag, "Index");
 
-  mg_send_head(nc, 200, strlen(kIndexHtml), "Content-Type: text/html");
-  mg_send(nc, kIndexHtml, strlen(kIndexHtml));
+  mg_send_head(nc, 200, HTML_LEN(index_html), "Content-Type: text/html");
+  mg_send(nc, HTML_CONTENTS(index_html), HTML_LEN(index_html));
   nc->flags |= MG_F_SEND_AND_CLOSE;
 }
 
 void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
-  ESP_LOGD(kTag, "Write wifi config");
+  ESP_LOGI(kTag, "Write wifi config");
   http_message* hm = static_cast<http_message*>(ev_data);
 
   struct WifiConfig {
@@ -262,6 +237,7 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
 }
 
 void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
+  ESP_LOGI(kTag, "Got firwamware update");
   bool is_response_sent = false;
 
   struct OtaContext {
@@ -408,6 +384,7 @@ abort_request:
 }
 
 void HandleEventsStream(mg_connection *nc, int event, void *ev_data) {
+  ESP_LOGI(kTag, "Requesting event stream");
   switch (event) {
     case MG_EV_WEBSOCKET_HANDSHAKE_DONE: {
       static constexpr char kEventHello[] = "{ 'data': 'Hello' }";
@@ -448,6 +425,7 @@ void HandleBroadcast(mg_connection* nc, int ev, void* ev_data) {
 }  // namespace
 
 void HttpdTask(void *pvParameters) {
+  ESP_LOGI(kTag, "Binding port 80");
   mg_mgr_init(&g_mgr, NULL); // TODO(awong): Move this into its own init.
   mg_connection *c = mg_bind(&g_mgr, ":80", &MongooseEventHandler);
 

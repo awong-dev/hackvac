@@ -3,6 +3,7 @@
 #include "constants.h"
 #include "cn105.h"
 #include "httpd.h"
+#include "event_log.h"
 #include "wifi.h"
 
 #include "freertos/FreeRTOS.h"
@@ -78,6 +79,8 @@ void cpp_entry() {
   dump_chip_info();
   dump_ota_boot_info();
 
+  EventLogInit();
+
   // Initialize NVS
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
@@ -100,7 +103,7 @@ void cpp_entry() {
 
 //  xTaskCreate(&cn105_control_task, "cn105_control_task", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
 
-  xTaskCreate(&HttpdTask, "httpd", 4096, NULL, 2, NULL);
+  xTaskCreate(&HttpdTask, "httpd", XT_STACK_EXTRA_CLIB + 4096, NULL, 2, NULL);
 
   // Silly debug tasks.
   xTaskCreate(&blink_task, "blink_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);

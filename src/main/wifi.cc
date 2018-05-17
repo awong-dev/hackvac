@@ -100,20 +100,15 @@ void WifiConnect(const wifi_config_t& wifi_config, bool is_station) {
   ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
   if (is_station) {
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA,
                                         const_cast<wifi_config_t*>(&wifi_config)));
   } else {
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP) );
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP,
                                         const_cast<wifi_config_t*>(&wifi_config)));
   }
   ESP_ERROR_CHECK(esp_wifi_start());
-
-  if (!is_station) {
-    // Run with DHCP server cause there won't be one.
-    ESP_ERROR_CHECK(tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_AP));
-  }
 
   ESP_LOGI(kTag, "wifi_init finished.");
   ESP_LOGI(kTag, "%s SSID:%s password:%s",

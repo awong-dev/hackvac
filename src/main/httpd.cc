@@ -78,7 +78,7 @@ mg_str TokenToMgStr(mg_str data, const jsmntok_t& token) {
 void MongooseEventHandler(struct mg_connection *nc,
 					 int event,
 					 void *eventData) {
-  ESP_LOGI(kTag, "Event %d", event);
+//  ESP_LOGI(kTag, "Event %d", event);
   if (event == MG_EV_HTTP_REQUEST) {
     http_message* message = static_cast<http_message*>(eventData);
     ESP_LOGI(kTag, "HTTP received: %.*s for %.*s", message->method.len, message->method.p, message->uri.len, message->uri.p);
@@ -384,10 +384,11 @@ abort_request:
 }
 
 void HandleEventsStream(mg_connection *nc, int event, void *ev_data) {
-  ESP_LOGI(kTag, "Requesting event stream");
+//  ESP_LOGI(kTag, "Requesting event stream %d", event);
+  static constexpr char kEventHello[] = "{ 'data': 'Hello' }";
   switch (event) {
     case MG_EV_WEBSOCKET_HANDSHAKE_DONE: {
-      static constexpr char kEventHello[] = "{ 'data': 'Hello' }";
+      ESP_LOGI(kTag, "handhsake done");
       mg_send_websocket_frame(nc, WEBSOCKET_OP_TEXT, kEventHello,
                               strlen(kEventHello));
       nc->flags |= RECEIVES_EVENT_LOG;
@@ -395,24 +396,48 @@ void HandleEventsStream(mg_connection *nc, int event, void *ev_data) {
       break;
     }
     case MG_EV_CLOSE:
+      ESP_LOGI(kTag, "closing socket");
       DecrementListeners();
       break;
 
     case MG_EV_WEBSOCKET_HANDSHAKE_REQUEST:
+      ESP_LOGI(kTag, "hs request");
+      break;
     case MG_EV_WEBSOCKET_FRAME:
+      ESP_LOGI(kTag, "received frame");
+      mg_send_websocket_frame(nc, WEBSOCKET_OP_TEXT, kEventHello,
+                              strlen(kEventHello));
+      break;
+    case MG_EV_WEBSOCKET_CONTROL_FRAME: {
+      websocket_message* control_frame = static_cast<websocket_message*>(ev_data);
+      ESP_LOGI(kTag, "received control frame. flags %x, data_len %d, data: '%.*s'",
+               control_frame->flags & 0xf, control_frame->size, control_frame->size, control_frame->data);
+      if ((control_frame->flags & 0xf) ==  WEBSOCKET_OP_PING) {
+        mg_send_websocket_frame(nc, WEBSOCKET_OP_PONG, nullptr, 0);
+      }
+      break;
+    }
     default:
       // Ignore these.
-      break;
       break;
   }
 }
 
 void HandleBroadcast(mg_connection* nc, int ev, void* ev_data) {
+  if (nc->flags & RECEIVES_EVENT_LOG) {
+    ESP_LOGI(kTag, "yay man");
+  } else {
+    return;
+  }
   switch (ev) {
     case MG_EV_POLL:
       if (nc->flags & RECEIVES_EVENT_LOG) {
         // Write a frame here.
+    ESP_LOGI(kTag, "strlen man");
         size_t len = strlen(static_cast<const char*>(ev_data));
+    ESP_LOGI(kTag, "lgoging man");
+        ESP_LOGI(kTag, "received %d %.*s", len, len, static_cast<const char*>(ev_data));
+    ESP_LOGI(kTag, "sending man");
         mg_send_websocket_frame(nc, WEBSOCKET_OP_TEXT, ev_data, len);
       }
       break;
@@ -430,12 +455,12 @@ void HttpdTask(void *pvParameters) {
   mg_connection *c = mg_bind(&g_mgr, ":80", &MongooseEventHandler);
 
   mg_set_protocol_http_websocket(c);
-  mg_register_http_endpoint(c, "/led_on", &HandleLedOn);
-  mg_register_http_endpoint(c, "/led_off", &HandleLedOff);
-  mg_register_http_endpoint(c, "/", &HandleIndex);
-  mg_register_http_endpoint(c, "/api/firmware", &HandleFirmware);
-  mg_register_http_endpoint(c, "/api/wificonfig", &HandleWifiConfig);
-  mg_register_http_endpoint(c, "/api/events", &HandleEventsStream);
+  mg_register_http_endpoint(c, "/$", &HandleIndex);
+  mg_register_http_endpoint(c, "/led_on$", &HandleLedOn);
+  mg_register_http_endpoint(c, "/led_off$", &HandleLedOff);
+  mg_register_http_endpoint(c, "/api/firmware$", &HandleFirmware);
+  mg_register_http_endpoint(c, "/api/wificonfig$", &HandleWifiConfig);
+  mg_register_http_endpoint(c, "/api/events$", &HandleEventsStream);
 
   while(1) {
     mg_mgr_poll(&g_mgr, 10000);

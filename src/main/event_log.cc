@@ -1,8 +1,11 @@
 #include "event_log.h"
+
 #include <atomic>
+#include <string.h>
 
 #include <esp_log.h>
 #include <esp_types.h>
+#include <cJSON.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -38,45 +41,54 @@ void LogToOrig(const char* fmt, ...) {
 }
 
 int LogHook(const char* fmt, va_list argp) {
-  int ret_val = g_original_logger(fmt, argp);
-  static std::atomic_int reentrancy_guard{};
-  if (reentrancy_guard == 0) {
-    // This races, but it'll stop an infinite loop regardless.
-    reentrancy_guard++;
+  static std::atomic_uint event_num{};
+  unsigned int cur_event_num = ++event_num;
 
-    // Print this into the buffer now.
-    static constexpr size_t kMaxEntrySize = 512;
-    char buf[kMaxEntrySize];
-    int len = vsnprintf(buf, sizeof(buf) - 1, fmt, argp);
-    if (len < 0) {
-      len = kMaxEntrySize-1;
+  int ret_val = g_original_logger(fmt, argp);
+
+  // Render this into a string now.
+  // 512 is send buffer size.
+  // 9 is max digits for int32.
+  // 17 bytes of overhead for {"n":, "m":""}
+  // 1 byte for null terminator.
+  // 10 more bytes, incase I miscount.
+  static constexpr size_t kMaxEntrySize = 512;
+  static constexpr size_t kMaxMsgSize = kMaxEntrySize - 9 - 17 - 1 - 5;
+  char buf[kMaxEntrySize];
+  int size_left = kMaxMsgSize;
+  size_left -= snprintf(buf, size_left, "%u: ", cur_event_num);
+  vsnprintf(buf, size_left, fmt, argp);
+
+  // Render into JSON.
+  cJSON *root = cJSON_CreateObject();
+  if (root &&
+      cJSON_AddNumberToObject(root, "n", cur_event_num) &&
+      cJSON_AddStringToObject(root, "m", buf) &&
+      cJSON_PrintPreallocated(root, buf, sizeof(buf), false) == 1) {
+    // At 115200 baud, 1-byte takes 1/(1115200/8) * 1000 * 1000 = 69.4ns.
+    // Thus a 512 byte buffer takes minimal 35.6ms. Round to 40ms and give 2x
+    // for contention with 1 other write.
+    if (xRingbufferSend(g_log_events, &buf[0], strlen(buf) + 1, pdMS_TO_TICKS(80)) != pdTRUE) {
+      LogToOrig("event dropped %u\n", cur_event_num);;
     }
-    buf[sizeof(buf) - 1] = '\0';
-    // It'll take at least 20 ticks to log an error to the uart.
-    static int event_num = 0;
-    event_num++;
-    if (xRingbufferSend(g_log_events, &buf[0], len + 1, 40) != pdTRUE) {
-      LogToOrig("event dropped %d\n", event_num);
-    }
-    reentrancy_guard--;
+  } else {
+    LogToOrig("Could not render json %u\n", cur_event_num);
   }
 
+  cJSON_Delete(root);
   return ret_val;
 }
 
 void EventLogPublishTask(void* pvParameters) {
   for(;;) {
     // Block until woken
-    ESP_LOGI(kTag, "Waiting until a listener showed ups");
+    LogToOrig("%s: Waiting until a listener to show up\n", kTag);
     ulTaskNotifyTake(pdFALSE, portMAX_DELAY);
     while (g_listener_count > 0) {
       size_t item_size;
-      ESP_LOGI(kTag, "Waiting for ring buffer");
       void *data = xRingbufferReceive(g_log_events, &item_size, 100000);
       if (data) {
-        ESP_LOGI(kTag, "Publishing data %d, %p, last char %d", item_size, data, static_cast<char*>(data)[item_size]);
         HttpdPublishEvent(data, item_size);
-        ESP_LOGI(kTag, "returning data %p", data);
         vRingbufferReturnItem(g_log_events, data);
       }
     }

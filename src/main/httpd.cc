@@ -26,6 +26,12 @@ HTML_DECL(index_html);
 namespace hackvac {
 namespace {
 
+void RestartTask(void* parameters) {
+  // Wait one second to restart.
+  vTaskDelay(pdMS_TO_TICKS(1000));
+  esp_restart();
+}
+
 constexpr char kTag[] = "hackvac:httpd";
 
 constexpr mg_str kEmptyJson = MG_MK_STR("{}");
@@ -237,7 +243,7 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
 }
 
 void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
-  ESP_LOGI(kTag, "Got firwamware update");
+  ESP_LOGD(kTag, "Got firwamware update");
   bool is_response_sent = false;
 
   struct OtaContext {
@@ -257,7 +263,7 @@ void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
 
   switch (event) {
     case MG_EV_HTTP_MULTIPART_REQUEST: {
-      ESP_LOGD(kTag, "firmware upload starting");
+      ESP_LOGI(kTag, "firmware upload starting");
       nc->user_data = new OtaContext();
       break;
     }
@@ -349,7 +355,8 @@ void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
         ESP_ERROR_CHECK(esp_ota_set_boot_partition(context->update_partition));
 
         // TODO(awong): This should call a shutdown hook.
-        ESP_LOGI(kTag, "Prepare to restart system!");
+        ESP_LOGI(kTag, "Prepare to restart system in 1 second!");
+        xTaskCreate(&RestartTask, "restart", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
         esp_restart();
       }
       // Yay! All good!
@@ -383,6 +390,8 @@ abort_request:
   }
 }
 
+// TODO(awong): Timeout net connections? Otherwise the server can be jammed.
+//  Look at mg_set_timer.
 void HandleEventsStream(mg_connection *nc, int event, void *ev_data) {
 //  ESP_LOGI(kTag, "Requesting event stream %d", event);
   static constexpr char kEventHello[] = "{ 'data': 'Hello' }";
@@ -424,24 +433,16 @@ void HandleEventsStream(mg_connection *nc, int event, void *ev_data) {
 }
 
 void HandleBroadcast(mg_connection* nc, int ev, void* ev_data) {
-  if (nc->flags & RECEIVES_EVENT_LOG) {
-    ESP_LOGI(kTag, "yay man");
-  } else {
+  if (!(nc->flags & RECEIVES_EVENT_LOG)) {
     return;
   }
   switch (ev) {
-    case MG_EV_POLL:
-      if (nc->flags & RECEIVES_EVENT_LOG) {
-        // Write a frame here.
-    ESP_LOGI(kTag, "strlen man");
-        size_t len = strlen(static_cast<const char*>(ev_data));
-    ESP_LOGI(kTag, "lgoging man");
-        ESP_LOGI(kTag, "received %d %.*s", len, len, static_cast<const char*>(ev_data));
-    ESP_LOGI(kTag, "sending man");
-        mg_send_websocket_frame(nc, WEBSOCKET_OP_TEXT, ev_data, len);
-      }
+    case MG_EV_POLL: {
+      // Write a frame here.
+      size_t len = strlen(static_cast<const char*>(ev_data));
+      mg_send_websocket_frame(nc, WEBSOCKET_OP_TEXT, ev_data, len);
       break;
-
+    }
     default:
       break;
   }

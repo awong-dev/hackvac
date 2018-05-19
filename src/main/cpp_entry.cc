@@ -103,7 +103,7 @@ void cpp_entry() {
 
 //  xTaskCreate(&cn105_control_task, "cn105_control_task", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
 
-  xTaskCreate(&HttpdTask, "httpd", XT_STACK_EXTRA_CLIB + 4096, NULL, 2, NULL);
+  xTaskCreate(&HttpdTask, "httpd", XT_STACK_EXTRA_CLIB + 8192, NULL, 2, NULL);
 
   // Silly debug tasks.
   xTaskCreate(&blink_task, "blink_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);

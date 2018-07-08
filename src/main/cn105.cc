@@ -5,25 +5,35 @@
 
 static const char *TAG = "hackvac:cn105";
 
-static constexpr uart_port_t CN105_UART = UART_NUM_1;
-static constexpr int CN105_TX_PIN = 4;
-static constexpr int CN105_RX_PIN = 5;
-static constexpr uart_port_t TSTAT_UART = UART_NUM_2;
-static constexpr int TSTAT_TX_PIN = 17;
-static constexpr int TSTAT_RX_PIN = 16;
-static constexpr int BUF_SIZE = 1024; 
-static constexpr int QUEUE_LENGTH = 20; 
-
 namespace {
+constexpr gpio_num_t kPacPower = GPIO_NUM_4;
+
+constexpr uart_port_t CN105_UART = UART_NUM_1;
+constexpr int CN105_TX_PIN = 18;
+constexpr int CN105_RX_PIN = 19;
+constexpr uart_port_t TSTAT_UART = UART_NUM_2;
+constexpr gpio_num_t TSTAT_TX_PIN = GPIO_NUM_5;
+constexpr gpio_num_t TSTAT_RX_PIN = GPIO_NUM_17;
+constexpr int BUF_SIZE = 1024; 
+constexpr int QUEUE_LENGTH = 20; 
+
+constexpr char kPacketConnect[] = {
+  0xfc, 0x5a, 0x01, 0x30, 0x02, 0xca, 0x01, 0xa8
+};
+constexpr char kPacketConnectAck[] = {
+  0xfc, 0x7a, 0x01, 0x30, 0x01, 0x00, 0x54, 0x00,  // This is what feels like he conn ack packet.
+  0x38, 0xec, 0xfe, 0x3f, 0xd8, 0x04, 0x10, 0x40, 0xc0, 0x87, 0xfe, 0x3f, 0x00, 0x00  // But actually we need all of this.
+};
 
 void write_task(void* parameters) {
-  char counter = 0;
-  for (;;) {
+  /*
+    for (;;) {
     ESP_LOGI(TAG, "cn105_sending: %u", counter);
     uart_write_bytes(CN105_UART, &counter, 1);
     counter++;
     vTaskDelay(100000 / portTICK_PERIOD_MS);
   }
+  */
 }
 
 }  // namespace
@@ -51,6 +61,10 @@ void Controller::Init() {
     .use_ref_tick = true,
   };
 
+  gpio_pad_select_gpio(kPacPower);
+  gpio_set_direction(kPacPower, GPIO_MODE_OUTPUT);
+  gpio_set_level(kPacPower, 1);  // off.
+
   // Configure CN105 UART
   uart_param_config(CN105_UART, &uart_config);
   uart_set_pin(CN105_UART, CN105_TX_PIN, CN105_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
@@ -64,7 +78,7 @@ void Controller::Init() {
   // Start the reading.
   xTaskCreate(&Controller::Cn105RxThunk, "cn105_rx_task", 4096, this, 4, &cn105_rx_task_);
   xTaskCreate(&Controller::TstatRxThunk, "tstat_rx_task", 4096, this, 3, &tstat_rx_task_);
-  xTaskCreate(&write_task, "write_task", 4096, NULL, 2, NULL);
+//  xTaskCreate(&write_task, "write_task", 4096, NULL, 2, NULL);
 }
 
 void Controller::Cn105RxThunk(void *pvParameters) {
@@ -89,14 +103,42 @@ void Controller::TstatRxThunk(void *pvParameters) {
 }
 
 void Controller::TstatRunloop() {
+  gpio_set_level(kPacPower, 0);  // PAC444CN on.
+  ESP_LOGI(TAG, "PAC444CN on");
+
   uart_event_t event;
+  size_t cur_pos = 0;
   for (;;) {
     // Wait for an event. Send.
     if(xQueueReceive(tstat_rx_queue_, &event, (portTickType)portMAX_DELAY)) {
-      static constexpr size_t buf_len = 1;
+      static constexpr size_t buf_len = 512;
       static uint8_t buf[buf_len];
-      int bytes = uart_read_bytes(TSTAT_UART, buf, buf_len, portMAX_DELAY);
-      ESP_LOGI(TAG, "tstat_received: %d (%d bytes)", buf[0], bytes);
+      size_t size = 0;
+      ESP_ERROR_CHECK(uart_get_buffered_data_len(TSTAT_UART, &size));
+      if (size > buf_len) {
+        ESP_LOGE(TAG, "tstat_received: way too much data %d", size);
+        size = buf_len;
+      }
+
+      int bytes = uart_read_bytes(TSTAT_UART, buf, size, portMAX_DELAY);
+      if (bytes > 0) {
+        ESP_LOGI(TAG, "tstat_received: %d bytes", bytes);
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, buf, bytes, ESP_LOG_INFO); 
+      }
+
+      // Do connection state machine.
+      for (size_t i = 0; i < bytes; ++i) {
+        if (kPacketConnect[cur_pos] == buf[i]) {
+          cur_pos++;
+          if (cur_pos == sizeof(kPacketConnect)) {
+            cur_pos = 0;
+            ESP_LOGI(TAG, "~~~Sending start packet~~~");
+            uart_write_bytes(TSTAT_UART, &kPacketConnectAck[0], sizeof(kPacketConnectAck));
+          }
+        } else {
+          cur_pos = 0;
+        }
+      }
     }
   }
 }

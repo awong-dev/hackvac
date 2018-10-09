@@ -26,7 +26,7 @@ NvsHandle NvsHandle::OpenWifiConfig(nvs_open_mode mode) {
 }
 
 NvsHandle NvsHandle::OpenBootState(nvs_open_mode mode) {
-  return NvsHandle("firmware_watchdog", mode);
+  return NvsHandle("boot_state", mode);
 }
 
 }  // namespace hackvac

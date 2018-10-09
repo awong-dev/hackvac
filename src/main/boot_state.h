@@ -13,7 +13,7 @@ enum class BootState : int8_t {
 
 BootState GetBootState();
 void SetBootState(BootState value);
-void firmware_watchdog_task(void *parameters);
+void firmware_watchdog();
 
 }  // namespace hackvac
 

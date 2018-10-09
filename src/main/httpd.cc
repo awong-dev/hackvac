@@ -157,7 +157,7 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
       // so the first should be 1 and the second should be zero.
       for (int i = 0; i < tokens[0].size; i++) {
         int field_start = 1 + 2*i;
-        if (tokens[field_start].type != JSMN_STRING
+        if (tokens[field_start].type != JSMN_STRING ||
             tokens[field_start].size != 1 ||
             tokens[field_start + 1].type != JSMN_STRING ||
             tokens[field_start + 1].size != 0) {
@@ -363,8 +363,8 @@ void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
 
         // TODO(awong): This should call a shutdown hook.
         ESP_LOGI(kTag, "Prepare to restart system in 1 second!");
-        xTaskCreate(&RestartTask, "restart", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
         SetBootState(BootState::FRESH);
+        xTaskCreate(&RestartTask, "restart", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
       }
       // Yay! All good!
       static constexpr char kFirmwareSuccess[] = "uploaded firmware md5: ";

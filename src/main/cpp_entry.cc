@@ -93,7 +93,7 @@ void cpp_entry() {
   // Silly debug tasks.
   xTaskCreate(&blink_task, "blink_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
   xTaskCreate(&uptime_task, "uptime_task", 4096, NULL, 1, NULL);
-  xTaskCreate(&firmware_watchdog_task, "firmware_watchdog_task", 4096, NULL, 1, NULL);
+  firmware_watchdog();
 
   // Setup Wifi access.
   wifi_config_t wifi_config;

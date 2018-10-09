@@ -1,6 +1,7 @@
 #include "httpd.h"
 
 #include "constants.h"
+#include "boot_state.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "event_log.h"
@@ -357,7 +358,7 @@ void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
         // TODO(awong): This should call a shutdown hook.
         ESP_LOGI(kTag, "Prepare to restart system in 1 second!");
         xTaskCreate(&RestartTask, "restart", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-        esp_restart();
+        SetBootState(BootState::FRESH);
       }
       // Yay! All good!
       static constexpr char kFirmwareSuccess[] = "uploaded firmware md5: ";

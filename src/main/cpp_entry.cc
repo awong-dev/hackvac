@@ -1,9 +1,10 @@
 #include "cpp_entry.h"
 
-#include "constants.h"
+#include "boot_state.h"
 #include "cn105.h"
-#include "httpd.h"
+#include "constants.h"
 #include "event_log.h"
+#include "httpd.h"
 #include "wifi.h"
 
 #include "freertos/FreeRTOS.h"
@@ -89,25 +90,26 @@ void cpp_entry() {
   }
   ESP_ERROR_CHECK(ret);
 
+  // Silly debug tasks.
+  xTaskCreate(&blink_task, "blink_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+  xTaskCreate(&uptime_task, "uptime_task", 4096, NULL, 1, NULL);
+  xTaskCreate(&firmware_watchdog_task, "firmware_watchdog_task", 4096, NULL, 1, NULL);
+
+  // Setup Wifi access.
   wifi_config_t wifi_config;
   static constexpr char kFallbackSsid[] = "hackvac_setup";
   static constexpr char kFallbackPassword[] = "cn105rulez";
   bool is_staion = LoadConfigFromNvs(kFallbackSsid, sizeof(kFallbackSsid),
                                      kFallbackPassword, sizeof(kFallbackPassword),
                                      &wifi_config);
-
   WifiConnect(wifi_config, is_staion);
 
+  // Initialize hackvac controller.
   static hackvac::Controller controller;
   controller.Init();
 
-//  xTaskCreate(&cn105_control_task, "cn105_control_task", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
-
+  // Run webserver.
   xTaskCreate(&HttpdTask, "httpd", XT_STACK_EXTRA_CLIB + 8192, NULL, 2, NULL);
-
-  // Silly debug tasks.
-  xTaskCreate(&blink_task, "blink_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-  xTaskCreate(&uptime_task, "uptime_task", 4096, NULL, 1, NULL);
 
   // TODO(awong): Add idle task hook ot sleep. Use hte ESP32-IDF hooks and don't create a task directly.
 }

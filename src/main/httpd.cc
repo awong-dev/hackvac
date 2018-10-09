@@ -139,9 +139,10 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
         return "Invalid JSON";
       }
       ESP_LOGI(kTag, "Num tokens found %d", num_tokens);
+      ESP_LOGI(kTag, "Received %.*s", data.len, data.p);
 
       static constexpr char kExpectedJson[] =
-        "Expected format: { 'ssid': 'abc', 'password': '123' }";
+        "Expected format: { \"ssid\": \"abc\", \"password\": \"123\" }. Use double-quotes!";
       if (tokens[0].type != JSMN_OBJECT ||
           tokens[0].size != 2) {
         ESP_LOGI(kTag, "Expected object with 2 children. Got type %d children %d",
@@ -150,9 +151,13 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
       }
 
       // All other tokens should be strings and be structured as pairs.
+      //
+      // JSMN treats 'string' as a JSMN_PRIMITIVE and a "string" as a
+      // JSMN_STRING (wtf?). The size field is the number of children
+      // so the first should be 1 and the second should be zero.
       for (int i = 0; i < tokens[0].size; i++) {
         int field_start = 1 + 2*i;
-        if (tokens[field_start].type != JSMN_STRING ||
+        if (tokens[field_start].type != JSMN_STRING
             tokens[field_start].size != 1 ||
             tokens[field_start + 1].type != JSMN_STRING ||
             tokens[field_start + 1].size != 0) {
@@ -173,7 +178,8 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
     static bool HandleEntry(mg_str data, jsmntok_t field_token,
                             jsmntok_t value_token) {
       static constexpr mg_str kSsidKey = MG_MK_STR("ssid");
-      if (mg_strcmp(TokenToMgStr(data, field_token), kSsidKey) == 0) {
+      mg_str field = TokenToMgStr(data, field_token);
+      if (mg_strcmp(field, kSsidKey) == 0) {
         mg_str value = TokenToMgStr(data, value_token);
         char ssid[kSsidBytes];
         if (value.len > sizeof(ssid) - 1) {
@@ -185,7 +191,7 @@ void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
       }
 
       static constexpr mg_str kPasswordKey = MG_MK_STR("password");
-      if (mg_strcmp(TokenToMgStr(data, field_token), kPasswordKey) == 0) {
+      if (mg_strcmp(field, kPasswordKey) == 0) {
         mg_str value = TokenToMgStr(data, value_token);
         char password[kPasswordBytes];
         if (value.len > sizeof(password) - 1) {

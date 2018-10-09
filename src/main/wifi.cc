@@ -70,10 +70,12 @@ bool LoadConfigFromNvs(
 
   size_t ssid_len = sizeof(wifi_config->sta.ssid);
   size_t password_len = sizeof(wifi_config->sta.password);
-  if (GetWifiSsid((char*)&wifi_config->sta.ssid[0], &ssid_len) &&
-      GetWifiPassword((char*)&wifi_config->sta.password[0], &password_len) &&
-      ssid_len > 1 &&
-      password_len > 1) {
+  bool has_config = GetWifiSsid((char*)&wifi_config->sta.ssid[0], &ssid_len) &&
+    GetWifiPassword((char*)&wifi_config->sta.password[0], &password_len);
+  ESP_LOGW(kTag, "Got config ssid: %.*s password: %.*s",
+           ssid_len, wifi_config->sta.ssid,
+           password_len, wifi_config->sta.password);
+  if (has_config && ssid_len > 1 && password_len > 1) {
     return true;
   } else {
     // TOOD(awong): Assert on size overage.
@@ -161,6 +163,7 @@ void SetWifiSsid(const char* ssid) {
   strncpy(trimmed_ssid, ssid, sizeof(trimmed_ssid));
   trimmed_ssid[sizeof(trimmed_ssid) - 1] = '\0';
 
+  ESP_LOGD(kTag, "Writing ssid: %s", trimmed_ssid);
   ESP_ERROR_CHECK(nvs_set_str(nvs_wifi_config.get(), kSsidKey, trimmed_ssid));
 }
 
@@ -171,6 +174,7 @@ void SetWifiPassword(const char* password) {
   strncpy(trimmed_password, password, sizeof(trimmed_password));
   trimmed_password[sizeof(trimmed_password) - 1] = '\0';
 
+  ESP_LOGD(kTag, "Writing password: %s", trimmed_password);
   ESP_ERROR_CHECK(nvs_set_str(nvs_wifi_config.get(), kPasswordKey, trimmed_password));
 }
 

@@ -93,7 +93,11 @@ void Controller::Cn105Runloop() {
       static constexpr size_t buf_len = 10;
       static uint8_t buf[buf_len];
       int bytes = uart_read_bytes(CN105_UART, &buf[0], buf_len, portMAX_DELAY);
-      uart_write_bytes(TSTAT_UART, reinterpret_cast<char*>(&buf[0]), bytes);
+      if (bytes > 0) {
+        ESP_LOGI(TAG, "cn105_rx: %d bytes", bytes);
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, buf, bytes, ESP_LOG_INFO); 
+        uart_write_bytes(TSTAT_UART, reinterpret_cast<char*>(&buf[0]), bytes);
+      }
     }
   }
 }
@@ -122,7 +126,7 @@ void Controller::TstatRunloop() {
 
       int bytes = uart_read_bytes(TSTAT_UART, buf, size, portMAX_DELAY);
       if (bytes > 0) {
-        ESP_LOGI(TAG, "tstat_received: %d bytes", bytes);
+        ESP_LOGI(TAG, "tstat_rx: %d bytes", bytes);
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, buf, bytes, ESP_LOG_INFO); 
       }
 

@@ -27,12 +27,6 @@ HTML_DECL(index_html);
 namespace hackvac {
 namespace {
 
-void RestartTask(void* parameters) {
-  // Wait one second to restart.
-  vTaskDelay(pdMS_TO_TICKS(1000));
-  esp_restart();
-}
-
 constexpr char kTag[] = "hackvac:httpd";
 
 constexpr mg_str kEmptyJson = MG_MK_STR("{}");
@@ -362,9 +356,8 @@ void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
         ESP_ERROR_CHECK(esp_ota_set_boot_partition(context->update_partition));
 
         // TODO(awong): This should call a shutdown hook.
-        ESP_LOGI(kTag, "Prepare to restart system in 1 second!");
         SetBootState(BootState::FRESH);
-        xTaskCreate(&RestartTask, "restart", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+        ESP_LOGI(kTag, "Firmware flashed!");
       }
       // Yay! All good!
       static constexpr char kFirmwareSuccess[] = "uploaded firmware md5: ";
@@ -395,6 +388,10 @@ abort_request:
     nc->user_data = nullptr;
     nc->flags |= MG_F_SEND_AND_CLOSE;
   }
+}
+
+void HandleRestart(mg_connection *nc, int event, void *ev_data) {
+  esp_restart();
 }
 
 // TODO(awong): Timeout net connections? Otherwise the server can be jammed.
@@ -466,9 +463,10 @@ void HttpdTask(void *pvParameters) {
   mg_register_http_endpoint(c, "/$", &HandleIndex);
   mg_register_http_endpoint(c, "/led_on$", &HandleLedOn);
   mg_register_http_endpoint(c, "/led_off$", &HandleLedOff);
-  mg_register_http_endpoint(c, "/api/firmware$", &HandleFirmware);
-  mg_register_http_endpoint(c, "/api/wificonfig$", &HandleWifiConfig);
   mg_register_http_endpoint(c, "/api/events$", &HandleEventsStream);
+  mg_register_http_endpoint(c, "/api/firmware$", &HandleFirmware);
+  mg_register_http_endpoint(c, "/api/restart$", &HandleRestart);
+  mg_register_http_endpoint(c, "/api/wificonfig$", &HandleWifiConfig);
 
   while(1) {
     mg_mgr_poll(&g_mgr, 10000);

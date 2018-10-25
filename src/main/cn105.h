@@ -1,12 +1,17 @@
 #ifndef CN105_H_
 #define CN105_H_
 
+#include <array>
+
 // This class is designed to control a Mitsubishi CN105 serial control
 // interface. It can either MiTM a signal to log/modify commands, or it
 // can just take over and send its own commands.
 //
 // CN105 is a custom checksumed protocol transported over a 2400 BAUD serial
 // connection.
+//
+// ?? The protocol seems to be half-duplex, needing a 10ms pause between send
+// ?? and receive.
 //
 // This class configures 2 UARTs with the expectation that it is sitting
 // between the CN105 connector on the Heatpump control board, and the
@@ -21,7 +26,7 @@
 // packet and forwards them along.
 //
 // At the start of each packet, the task with take an atomic snapshot of the
-// Controller objects packet modification configuration. That ensures that each
+// Controller object's packet modification configuration. That ensures that each
 // packet is internally consistent. It also means updates to the Controller object
 // only get latched into effect at packet boundaries.
 
@@ -44,29 +49,26 @@ namespace hackvac {
 //  Possibly version information or other synchronization markers that can
 //  detect endianess?
 //
-//  https://github.com/SwiCago/HeatPump assumes 22 byte max for full packet
-//  but format-wise, data_len can be 255 so max packet size may be 261.
-//
-//  checksum = (0xfc - sum_bytes(data)) & 0xff;
-//
-// TODO(awong): Check HEADER_LEN from https://github.com/SwiCago/HeatPump/blob/master/src/HeatPump.h which breaks the format above maybe?
-//
 // Reference code:
 //   https://github.com/hadleyrich/MQMitsi/blob/master/mitsi.py
 class Cn105Packet {
   public:
-    enum class Type : uint8_t {
+    // Bit 6 seems to indicate if it is an ACK. So if 0x5a is a packet then
+    // 0x7a is its ack.
+    enum class PacketType : uint8_t {
       // TODO(awong): the second nibble might be zone info. a == zone 1, b = zone2, etc.
-      CONNECT = 0x5a,
-      CONNECT_ACK = 0x7a, 
+      kConnect = 0x5a,
+      kConnectAck = 0x7a, 
 
       // Update HVAC control status.
-      UPDATE = 0x41, 
-      UPDATE_ACK = 0x61, 
+      kUpdate = 0x41, 
+      kUpdateAck = 0x61, 
 
       // Requesting info from the HeatPump.
-      INFO = 0x42, 
-      INFO_ACK = 0x62, 
+      kInfo = 0x42, 
+      kInfoAck = 0x62, 
+
+      kUnknown = 0x00,
     };
 
     // For UPDATE (0x41), the first data byte is the setting to change.
@@ -92,10 +94,129 @@ class Cn105Packet {
 
     Cn105Packet();
 
-    // Returns true if packet is complete.
-    bool AppendByte(uint8_t byte);
+    // Reset the packet to uninitialized state.
+    void Reset() {
+      bytes_read_ = 0;
+    }
+
+    // Returns true if byte succeeded. This can fail if the packet is complete,
+    // or if the the packet length was exceeded.
+    bool AppendByte(uint8_t byte) {
+      if (IsComplete() || bytes_read_ >= bytes_.size()) {
+        return false;
+      }
+      if (bytes_read_ >= bytes_.size()) {
+        return false;
+      }
+      bytes_.at(bytes_read_++) = byte;
+      return true;
+    }
+
+    // Size constants.
+    static constexpr size_t kHeaderLength = 5;
+    static constexpr size_t kChecksumSize = 1;
+
+    // Packet field constants.
+    static constexpr size_t kStartMarkerPos = 0;
+    static constexpr size_t kTypePos = 1;
+    static constexpr size_t kDataLenPos = 4;
+
+    // Returns true if the header has been read. After this,
+    // packet type and data length can be read.
+    bool IsHeaderComplete() const {
+      return bytes_read_ >= kHeaderLength;
+    }
+
+    // Header accessors. Returns valid data when IsHeaderComplete() is true.
+    size_t data_length() const { return bytes_[kDataLenPos]; }
+    PacketType type() const { return static_cast<PacketType>(bytes_[kTypePos]); }
+
+    // Returns true if current packet is complete.
+    bool IsComplete() const {
+      if (!IsHeaderComplete()) {
+        return false;
+      }
+      size_t packet_size = kHeaderLength + data_length() + kChecksumSize;
+      return (bytes_read_ >= packet_size);
+    }
+
+    // Verifies the checksum on the packet. The checksum algorithm, based on
+    // reverse-engineering packet captures from CN105 to a PAC444CN, is:
+    // checksum = (0xfc - sum(data)) & 0xff
+    bool IsChecksumValid() {
+      uint32_t checksum = 0xfc;
+      for (size_t i = 0; i < (bytes_read_ - 1); ++i) {
+        checksum -= bytes_.at(i);
+      }
+
+      return checksum == bytes_.at(bytes_read_);
+    }
+
+    // https://github.com/SwiCago/HeatPump assumes 22 byte max for full packet
+    // but format-wise, data_len can be 255 so max packet size may be 261.
+    // However that would be wasteful in memory usage so rouding up to 30.
+    constexpr static size_t kMaxPacketLength = 30;
 
   private:
+    std::array<uint8_t, kMaxPacketLength> bytes_;
+    size_t bytes_read_;
+};
+
+
+// This class implements a Half-Duplex packet-oriented serial channel.
+//
+// Looking at the data captures from the CN105 interface, it seems like
+// the CN105 never initiates communication. When communication occurs,
+// it is request/ack packet protocol with about a 10ms delay between
+// packets.
+//
+// Given that the UARTs on the esp32 are full-duplex, this software stack
+// attempts to fake this half-duplex setup. Guarantees are as follows:
+//
+//   (1) Any packet send will be delayed until 10ms after the most
+//       recent packet read/send completion.
+//   (2) Packet sending/receiving expects to take turns. If 2 sends are
+//       issued in quick succession, the second send will fail if
+//       a response has not been heard.
+//   (3) If more than 20ms (what's the right timeout?) have passed with
+//       no response, then the channel is considered reset and sends may
+//       again occur.
+class HalfDuplexChannel {
+// TODO(ajwong): Need algorithm for reading. Read until packet ends or timeout happens.
+// Up until the header, it may timeout. After the header, we know how many ms until
+// the packet is done. Then we tell if it is finished or aborted.
+//
+// Communication channel should be based on a mode (rx or tx) and a queue (next to send)
+// with a timeout. We can be permissive on the read, but sending must always be 10ms
+// or more than the previous action.
+ public:
+  HalfDuplexChannel();
+  ~HalfDuplexChannel();
+
+  using OnPacketCallback = void(*)(const Cn105Packet& packet);
+  void SetOnPacketHandler(OnPacketCallback callback);
+
+  // Tries to send packet.
+  //
+  // Returns 0 if the packet was sent. Otherwise, returns the number of ms to
+  // wait before the channel is free for sending.
+  int SendPacket(const Cn105Packet& packet);
+
+ private:
+  // Callback to invoke when a packet is completed.
+  OnPacketCallback on_packet_cb_;
+
+  // Timestamp of when the last byte was sent or received.
+  int64_t last_activity_timestamp_;
+
+  // Last packet recieved.
+  Cn105Packet last_received_packet_;
+
+  // The next packet to send.
+  Cn105Packet packet_to_send_;
+
+  // Task responsible for reading/sending packets.
+  TaskHandle_t pump_task_;
 };
  
 class Controller {

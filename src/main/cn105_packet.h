@@ -109,6 +109,8 @@ class Cn105Packet {
     size_t data_size() const { return bytes_[kDataLenPos]; }
     PacketType type() const { return static_cast<PacketType>(bytes_[kTypePos]); }
     size_t packet_size() const { return kHeaderLength + data_size() + kChecksumSize; }
+    uint8_t* cursor() { return &bytes_[bytes_read_]; }
+    void AddSize(size_t amoumt) { bytes_read_ += amoumt; }
 
     // Returns true if current packet is complete.
     bool IsComplete() const {

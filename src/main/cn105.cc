@@ -15,7 +15,7 @@ constexpr uart_port_t TSTAT_UART = UART_NUM_2;
 constexpr gpio_num_t TSTAT_TX_PIN = GPIO_NUM_5;
 constexpr gpio_num_t TSTAT_RX_PIN = GPIO_NUM_17;
 constexpr int BUF_SIZE = 1024; 
-constexpr int QUEUE_LENGTH = 20; 
+constexpr int QUEUE_LENGTH = 30;  // TODO(ajwong): Size to match max packet size.
 
 constexpr char kPacketConnect[] = {
   0xfc, 0x5a, 0x01, 0x30, 0x02, 0xca, 0x01, 0xa8

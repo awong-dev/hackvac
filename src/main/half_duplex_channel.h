@@ -2,6 +2,7 @@
 #define HALF_DUPLEX_CHANNEL_H_
 
 #include <memory>
+#include <vector>
 
 #include "cn105_packet.h"
 #include "driver/uart.h"
@@ -52,26 +53,24 @@ class HalfDuplexChannel {
  private:
   enum class ChannelState {
     READY,
-    BUSY,
-    SENDING,
     RECEIVING,
   };
 
+  // Simple thunk to adapt the C-style FreeRTOS API to C++.
   static void PumpTaskThunk(void *pvParameters);
 
+  // Runloop for the task that manages sending/receiving packets from
+  // |uart_| while maintaining the guarantees of the HalfDuplexChannel.
   void PumpTaskRunloop();
 
-  // Handle state transitions.
-  void TransitionState(QueueSetMemberHandle_t active_member);
+  void DoSendPacket();
+  void DoReceivePacket();
 
   // The state of the channel. You can only send in the READY state.
   ChannelState state_ = ChannelState::READY;
 
   // Callback to invoke when a packet is completed.
   OnPacketCallback on_packet_cb_ = nullptr;
-
-  // Timestamp of when the next send is allowed.
-  int64_t not_busy_timestamp_ = 0;
 
   // UART to read from.
   uart_port_t uart_ = UART_NUM_MAX;
@@ -80,7 +79,7 @@ class HalfDuplexChannel {
   QueueHandle_t rx_queue_ = nullptr;
 
   // Binary Semaphore that signals a send is wanted.
-  QueueHandle_t send_signal_ = nullptr;
+  QueueHandle_t tx_queue_ = nullptr;
 
   // Last packet recieved.
   Cn105Packet last_received_packet_;
@@ -90,10 +89,7 @@ class HalfDuplexChannel {
   static constexpr int kBusyMs = 20;
 
   // The next packet to send.
-  std::unique_ptr<Cn105Packet> packet_to_send_;
-
-  // Tracks how many bytes to have been sent from |packet_to_send_|.
-  size_t bytes_sent_ = 0;
+  std::vector<std::unique_ptr<Cn105Packet>> tx_packets_;
 
   // Task responsible for reading/sending packets.
   TaskHandle_t pump_task_ = nullptr;

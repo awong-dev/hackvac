@@ -70,6 +70,9 @@ class Cn105Packet {
       bytes_read_ = 0;
     }
 
+    void IncrementErrorCount();
+    void IncrementUnexpectedEventCount();
+
     // Returns true if byte succeeded. This can fail if the packet is complete,
     // or if the the packet length was exceeded.
     bool AppendByte(uint8_t byte) {
@@ -110,6 +113,7 @@ class Cn105Packet {
     PacketType type() const { return static_cast<PacketType>(bytes_[kTypePos]); }
     size_t packet_size() const { return kHeaderLength + data_size() + kChecksumSize; }
     uint8_t* cursor() { return &bytes_[bytes_read_]; }
+    const uint8_t* raw_bytes() const { return bytes_.data(); }
     void AddSize(size_t amoumt) { bytes_read_ += amoumt; }
 
     // Returns true if current packet is complete.

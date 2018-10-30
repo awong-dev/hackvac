@@ -25,16 +25,16 @@ constexpr char kPacketConnectAck[] = {
   0x38, 0xec, 0xfe, 0x3f, 0xd8, 0x04, 0x10, 0x40, 0xc0, 0x87, 0xfe, 0x3f, 0x00, 0x00  // But actually we need all of this.
 };
 
-void write_task(void* parameters) {
   /*
+void write_task(void* parameters) {
     for (;;) {
     ESP_LOGI(TAG, "cn105_sending: %u", counter);
     uart_write_bytes(CN105_UART, &counter, 1);
     counter++;
     vTaskDelay(100000 / portTICK_PERIOD_MS);
   }
-  */
 }
+  */
 
 }  // namespace
 

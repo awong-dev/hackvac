@@ -2,7 +2,7 @@
 #define HALF_DUPLEX_CHANNEL_H_
 
 #include <memory>
-#include <vector>
+#include <queue>
 
 #include "cn105_packet.h"
 #include "driver/uart.h"
@@ -36,26 +36,23 @@ class HalfDuplexChannel {
 // with a timeout. We can be permissive on the read, but sending must always be 10ms
 // or more than the previous action.
  public:
-  HalfDuplexChannel();
+  using OnPacketCallback = void(*)(std::unique_ptr<Cn105Packet>);
+
+  HalfDuplexChannel(const char* name,
+                    uart_port_t uart,
+                    gpio_num_t tx_pin,
+                    gpio_num_t rx_pin,
+                    OnPacketCallback callback);
   ~HalfDuplexChannel();
 
-  using OnPacketCallback = void(*)(const Cn105Packet& packet);
-  void SetOnPacketHandler(OnPacketCallback callback) {
-    on_packet_cb_ = callback;
-  }
+  // Starts sending/receiving data from the UART. After this, |on_packet_cb_|
+  // will begin to receive Cn105Packets.
+  void Start();
 
-  // Tries to send packet.
-  //
-  // Returns 0 if the packet was sent. Otherwise, returns the number of ms to
-  // wait before the channel is free for sending.
-  int SendPacket(const Cn105Packet& packet);
+  // Enqueues a packet for sending.
+  void EnqueuePacket(std::unique_ptr<Cn105Packet> packet);
 
  private:
-  enum class ChannelState {
-    READY,
-    RECEIVING,
-  };
-
   // Simple thunk to adapt the C-style FreeRTOS API to C++.
   static void PumpTaskThunk(void *pvParameters);
 
@@ -63,17 +60,44 @@ class HalfDuplexChannel {
   // |uart_| while maintaining the guarantees of the HalfDuplexChannel.
   void PumpTaskRunloop();
 
+  // Synchronously sends 1 packet from |tx_packets_| to the uart_ and blocks
+  // the requisite time until the channel can send/receive again.
   void DoSendPacket();
-  void DoReceivePacket();
 
-  // The state of the channel. You can only send in the READY state.
-  ChannelState state_ = ChannelState::READY;
+  // Synchronously invokes the |on_packet_cb_| for |current_rx_packet_| and
+  // blocks the requisite time for the channel to go quiet. This effectively
+  // resets the channel.
+  void DispatchRxPacket();
 
-  // Callback to invoke when a packet is completed.
-  OnPacketCallback on_packet_cb_ = nullptr;
+  // Reads data from UART attempting to complete a Cn105Packet. When a packet
+  // is complete, it is sent off to the |on_packet_cb_| callback, the task is
+  // blocked until the channel is ready for sending/receive again, and then
+  // the function returns true. If the UART runs out of data before the packet
+  // is complete, return false.
+  void ProcessReceiveEvent(uart_event_t event);
+
+  static constexpr char kTag[] = "HalfDuplexChannel";
+
+  // The delay to wait between the last send or last receive before the next
+  // packet is allowed to be sent. Seems to be about 4 bytes worth of time.
+  //
+  // This is also being used as the timeout for a receive channel going dead.
+  static constexpr int kBusyMs = 20;
+
+  // Name of the channel. Used for the pump task name.
+  const char* name_ = nullptr;
 
   // UART to read from.
   uart_port_t uart_ = UART_NUM_MAX;
+
+  // Pin for UART TX.
+  gpio_num_t tx_pin_ = GPIO_NUM_MAX;
+
+  // Pin for UART RX.
+  gpio_num_t rx_pin_ = GPIO_NUM_MAX;
+
+  // Callback to invoke when a packet is completed.
+  OnPacketCallback on_packet_cb_ = nullptr;
 
   // Queue that receives the data from the UART.
   QueueHandle_t rx_queue_ = nullptr;
@@ -81,15 +105,11 @@ class HalfDuplexChannel {
   // Binary Semaphore that signals a send is wanted.
   QueueHandle_t tx_queue_ = nullptr;
 
-  // Last packet recieved.
-  Cn105Packet last_received_packet_;
-
-  // The delay to wait between the last send or last receive before the next
-  // packet is allowed to be sent.
-  static constexpr int kBusyMs = 20;
+  // Current packet being received.
+  std::unique_ptr<Cn105Packet> current_rx_packet_;
 
   // The next packet to send.
-  std::vector<std::unique_ptr<Cn105Packet>> tx_packets_;
+  std::queue<std::unique_ptr<Cn105Packet>> tx_packets_;
 
   // Task responsible for reading/sending packets.
   TaskHandle_t pump_task_ = nullptr;

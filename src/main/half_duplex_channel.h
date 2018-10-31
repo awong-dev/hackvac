@@ -1,6 +1,7 @@
 #ifndef HALF_DUPLEX_CHANNEL_H_
 #define HALF_DUPLEX_CHANNEL_H_
 
+#include <functional>
 #include <memory>
 #include <queue>
 
@@ -36,8 +37,9 @@ class HalfDuplexChannel {
 // with a timeout. We can be permissive on the read, but sending must always be 10ms
 // or more than the previous action.
  public:
-  using OnPacketCallback = void(*)(std::unique_ptr<Cn105Packet>);
+  using OnPacketCallback = std::function<void(std::unique_ptr<Cn105Packet>)>;
 
+  // TODO(ajwong): Missing priority.
   HalfDuplexChannel(const char* name,
                     uart_port_t uart,
                     gpio_num_t tx_pin,
@@ -76,8 +78,6 @@ class HalfDuplexChannel {
   // is complete, return false.
   void ProcessReceiveEvent(uart_event_t event);
 
-  static constexpr char kTag[] = "HalfDuplexChannel";
-
   // The delay to wait between the last send or last receive before the next
   // packet is allowed to be sent. Seems to be about 4 bytes worth of time.
   //
@@ -97,7 +97,7 @@ class HalfDuplexChannel {
   gpio_num_t rx_pin_ = GPIO_NUM_MAX;
 
   // Callback to invoke when a packet is completed.
-  OnPacketCallback on_packet_cb_ = nullptr;
+  OnPacketCallback on_packet_cb_;
 
   // Queue that receives the data from the UART.
   QueueHandle_t rx_queue_ = nullptr;

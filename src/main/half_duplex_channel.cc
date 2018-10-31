@@ -4,6 +4,10 @@
 
 namespace hackvac {
 
+namespace {
+constexpr char kTag[] = "HalfDuplexChannel";
+}  // namespace
+
 HalfDuplexChannel::HalfDuplexChannel(const char *name,
                                      uart_port_t uart,
                                      gpio_num_t tx_pin,
@@ -42,6 +46,8 @@ void HalfDuplexChannel::Start() {
   constexpr int BUF_SIZE = 1024; 
   constexpr int QUEUE_LENGTH = 30;
   uart_driver_install(uart_, BUF_SIZE * 2, BUF_SIZE * 2, QUEUE_LENGTH, &rx_queue_, 0);
+
+  // TODO(ajwong): priority should be passed in.
   xTaskCreate(&HalfDuplexChannel::PumpTaskThunk, name_, 4096, this, 4, &pump_task_);
 }
 
@@ -142,11 +148,12 @@ void HalfDuplexChannel::ProcessReceiveEvent(uart_event_t event) {
                                     current_rx_packet_->NextChunkSize());
     int bytes = uart_read_bytes(uart_, current_rx_packet_->cursor(), bytes_to_read, 0);
     if (bytes == 0) {
-      // TODO(ajwong): This shouldn't be possible. Log error and reset.
+      ESP_LOGE(kTag, "Unable to read from UART");
+      abort();
       break;
     }
+    current_rx_packet_->move_cursor(bytes);
     event_bytes_left -= bytes_to_read;
-    current_rx_packet_->AddSize(bytes);
 
     // On a completed packet, pass off and block for requisite gap
     // between sends.

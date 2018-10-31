@@ -3,9 +3,30 @@
 
 #include <cstdint>
 
+#include <algorithm>
 #include <array>
+#include <limits>
+#include <memory>
 
 namespace hackvac {
+
+// Bit 6 seems to indicate if it is an ACK. So if 0x5a is a packet then
+// 0x7a is its ack.
+enum class PacketType : uint8_t {
+  // TODO(awong): the second nibble might be zone info. a == zone 1, b = zone2, etc.
+  kConnect = 0x5a,
+  kConnectAck = 0x7a, 
+
+  // Update HVAC control status.
+  kUpdate = 0x41, 
+  kUpdateAck = 0x61, 
+
+  // Requesting info from the HeatPump.
+  kInfo = 0x42, 
+  kInfoAck = 0x62, 
+
+  kUnknown = 0x00,
+};
 
 // The Cn105 serial protocol sends compact, checksumed, byte-oriented packets.
 //
@@ -24,24 +45,6 @@ namespace hackvac {
 //   https://github.com/hadleyrich/MQMitsi/blob/master/mitsi.py
 class Cn105Packet {
   public:
-    // Bit 6 seems to indicate if it is an ACK. So if 0x5a is a packet then
-    // 0x7a is its ack.
-    enum class PacketType : uint8_t {
-      // TODO(awong): the second nibble might be zone info. a == zone 1, b = zone2, etc.
-      kConnect = 0x5a,
-      kConnectAck = 0x7a, 
-
-      // Update HVAC control status.
-      kUpdate = 0x41, 
-      kUpdateAck = 0x61, 
-
-      // Requesting info from the HeatPump.
-      kInfo = 0x42, 
-      kInfoAck = 0x62, 
-
-      kUnknown = 0x00,
-    };
-
     // For UPDATE (0x41), the first data byte is the setting to change.
     //   Control Update Extended
     //   0x07 = set current room temperature
@@ -65,25 +68,31 @@ class Cn105Packet {
 
     Cn105Packet();
 
-    // Reset the packet to uninitialized state.
-    void Reset() {
-      bytes_read_ = 0;
+    template <size_t n>
+    Cn105Packet(PacketType type, std::array<uint8_t, n> data)
+        : bytes_read_(kHeaderLength + data.size() + kChecksumSize) {
+      static_assert(n < std::numeric_limits<uint8_t>::max() &&
+                    n < kMaxPacketLength, "array too big");
+      bytes_[kStartMarkerPos] = 0xfc;
+      bytes_[kTypePos] = static_cast<uint8_t>(type);
+      bytes_[2] = 0x01;  // TODO(ajwong): Make some constants.
+      bytes_[3] = 0x30;
+      bytes_[kDataLenPos] = data.size();
+      if (n > 0) {
+        std::copy(data.begin(), data.end(), bytes_.begin() + kDataStartPos);
+      }
+      bytes_[bytes_read_ - 1] =
+          CalculateChecksum(&bytes_[0], kHeaderLength + data.size());
     }
 
-    void IncrementErrorCount();
-    void IncrementUnexpectedEventCount();
+    ~Cn105Packet();
 
-    // Returns true if byte succeeded. This can fail if the packet is complete,
-    // or if the the packet length was exceeded.
-    bool AppendByte(uint8_t byte) {
-      if (IsComplete() || bytes_read_ >= bytes_.size()) {
-        return false;
-      }
-      if (bytes_read_ >= bytes_.size()) {
-        return false;
-      }
-      bytes_.at(bytes_read_++) = byte;
-      return true;
+    void IncrementErrorCount() {
+      error_count_++;
+    }
+
+    void IncrementUnexpectedEventCount() {
+      unexpected_event_count_++;
     }
 
     // Size constants.
@@ -94,47 +103,35 @@ class Cn105Packet {
     static constexpr size_t kStartMarkerPos = 0;
     static constexpr size_t kTypePos = 1;
     static constexpr size_t kDataLenPos = 4;
+    static constexpr size_t kDataStartPos = 5;
 
     // Returns true if the header has been read. After this,
     // packet type and data length can be read.
-    bool IsHeaderComplete() const {
-      return bytes_read_ >= kHeaderLength;
-    }
-
-    size_t NextChunkSize() {
-      if (!IsHeaderComplete())  {
-        return kHeaderLength - bytes_read_;
-      }
-      return kHeaderLength + data_size() + kChecksumSize - bytes_read_;
-    }
-
-    // Header accessors. Returns valid data when IsHeaderComplete() is true.
-    size_t data_size() const { return bytes_[kDataLenPos]; }
-    PacketType type() const { return static_cast<PacketType>(bytes_[kTypePos]); }
-    size_t packet_size() const { return kHeaderLength + data_size() + kChecksumSize; }
-    uint8_t* cursor() { return &bytes_[bytes_read_]; }
-    const uint8_t* raw_bytes() const { return bytes_.data(); }
-    void AddSize(size_t amoumt) { bytes_read_ += amoumt; }
+    bool IsHeaderComplete() const;
 
     // Returns true if current packet is complete.
-    bool IsComplete() const {
-      if (!IsHeaderComplete()) {
-        return false;
-      }
-      return (bytes_read_ >= packet_size());
-    }
+    bool IsComplete() const;
 
-    // Verifies the checksum on the packet. The checksum algorithm, based on
-    // reverse-engineering packet captures from CN105 to a PAC444CN, is:
-    // checksum = (0xfc - sum(data)) & 0xff
-    bool IsChecksumValid() {
-      uint32_t checksum = 0xfc;
-      for (size_t i = 0; i < (bytes_read_ - 1); ++i) {
-        checksum -= bytes_.at(i);
-      }
+    // Verifies the checksum on the packet.
+    bool IsChecksumValid();
 
-      return checksum == bytes_.at(bytes_read_);
-    }
+    // Calculates the CN105 protocol checksum for the given bytes. The
+    // checksum algorithm, based on reverse-engineering packet captures
+    // from CN105 to a PAC444CN, is checksum = (0xfc - sum(data)) & 0xff
+    static uint8_t CalculateChecksum(uint8_t* bytes, size_t size);
+
+    // Returns number of bytes that should be read next.
+    size_t NextChunkSize() const;
+
+    // Header accessors. Returns valid data when IsHeaderComplete() is true.
+    PacketType type() const { return static_cast<PacketType>(bytes_[kTypePos]); }
+    size_t data_size() const { return bytes_[kDataLenPos]; }
+
+    size_t packet_size() const { return kHeaderLength + data_size() + kChecksumSize; }
+    const uint8_t* raw_bytes() const { return bytes_.data(); }
+
+    uint8_t* cursor() { return &bytes_[bytes_read_]; }
+    void move_cursor(size_t amoumt) { bytes_read_ += amoumt; }
 
     // https://github.com/SwiCago/HeatPump assumes 22 byte max for full packet
     // but format-wise, data_len can be 255 so max packet size may be 261.
@@ -142,8 +139,33 @@ class Cn105Packet {
     constexpr static size_t kMaxPacketLength = 30;
 
   private:
+    size_t bytes_read_ = 0;
     std::array<uint8_t, kMaxPacketLength> bytes_;
-    size_t bytes_read_;
+
+    // Number of data-link layer errors.
+    size_t error_count_ = 0;
+
+    // Number of odd UART errors.
+    size_t unexpected_event_count_ = 0;
+};
+
+class ConnectAckPacket : public Cn105Packet {
+ public:
+  static std::unique_ptr<Cn105Packet> Create() {
+    static constexpr std::array<uint8_t, 1> data = { 0x00 };
+    return std::make_unique<Cn105Packet>(PacketType::kConnectAck, data);
+    /*
+    static constexpr char kPacketConnectAck[] = {
+      0xfc, 0x7a, 0x01, 0x30, 0x01, 0x00, 0x54,// 0x00,  // This is what feels like he conn ack packet.
+//      0x38, 0xec, 0xfe, 0x3f, 0xd8, 0x04, 0x10, 0x40, 0xc0, 0x87, 0xfe, 0x3f, 0x00, 0x00  // But actually we need all of this.
+    };
+    for (size_t i = 0; i < sizeof(kPacketConnectAck); ++i) {
+      *packet->cursor() = kPacketConnectAck[i];
+      packet->move_cursor(1);
+    }
+    return std::move(packet);
+    */
+  }
 };
 
 }  // namespace hackvac

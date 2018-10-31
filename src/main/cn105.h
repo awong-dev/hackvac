@@ -34,33 +34,37 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
+#include "half_duplex_channel.h"
+
 namespace hackvac {
 
 class Controller {
-  public:
-    Controller();
-    ~Controller();
+ public:
+  Controller();
+  ~Controller();
 
-    void Init();
+  // Starts the message processing.
+  void Init();
 
-    // Mode changes.
-    void set_passthru(bool is_passthru) { is_passthru_ = is_passthru; }
-    bool is_passthru() { return is_passthru_; }
+  // Mode changes.
+  void set_passthru(bool is_passthru) { is_passthru_ = is_passthru; }
+  bool is_passthru() { return is_passthru_; }
 
-  private:
-    static void Cn105RxThunk(void *pvParameters);
-    void Cn105Runloop();
+ private:
+  // Runs on the |hvac_control_| channel's message pump task.
+  void OnHvacControlPacket(std::unique_ptr<Cn105Packet> hvac_packet);
 
-    static void TstatRxThunk(void *pvParameters);
-    void TstatRunloop();
+  // Runs on the |thermostat_| channel's message pump task.
+  void OnThermostatPacket(std::unique_ptr<Cn105Packet> thermostat_packet);
 
-    bool is_passthru_;
+  // Sets the state.
+  bool is_passthru_ = false;
 
-    TaskHandle_t cn105_rx_task_;
-    QueueHandle_t cn105_rx_queue_;
+  // Channel talking to the HVAC control unit.
+  HalfDuplexChannel hvac_control_;
 
-    TaskHandle_t tstat_rx_task_;
-    QueueHandle_t tstat_rx_queue_;
+  // Channel talking to the thermosat.
+  HalfDuplexChannel thermostat_;
 };
 
 }  // namespace hackvac

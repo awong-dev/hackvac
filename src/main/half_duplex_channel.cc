@@ -5,6 +5,9 @@
 namespace hackvac {
 
 namespace {
+// TODO(ajwong): Revisit queue lengths.
+constexpr int kRxQueueLength = 30;
+constexpr int kTxQueueLength = 5;
 constexpr char kTag[] = "HalfDuplexChannel";
 }  // namespace
 
@@ -17,7 +20,8 @@ HalfDuplexChannel::HalfDuplexChannel(const char *name,
     uart_(uart),
     tx_pin_(tx_pin),
     rx_pin_(rx_pin),
-    on_packet_cb_(callback) {
+    on_packet_cb_(callback),
+    tx_queue_(xQueueCreate(kTxQueueLength, sizeof(Cn105Packet*))) {
 }
 
 HalfDuplexChannel::~HalfDuplexChannel() {
@@ -43,9 +47,8 @@ void HalfDuplexChannel::Start() {
   uart_set_pin(uart_, tx_pin_, rx_pin_, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
   // TODO(ajwong): Pick the right sizes and dedup constants with QueueSetHandle_t.
-  constexpr int BUF_SIZE = 1024; 
-  constexpr int QUEUE_LENGTH = 30;
-  uart_driver_install(uart_, BUF_SIZE * 2, BUF_SIZE * 2, QUEUE_LENGTH, &rx_queue_, 0);
+  constexpr int kBufSize = 1024; 
+  uart_driver_install(uart_, kBufSize * 2, kBufSize * 2, kRxQueueLength, &rx_queue_, 0);
 
   // TODO(ajwong): priority should be passed in.
   xTaskCreate(&HalfDuplexChannel::PumpTaskThunk, name_, 4096, this, 4, &pump_task_);
@@ -62,9 +65,8 @@ void HalfDuplexChannel::PumpTaskThunk(void *pvParameters) {
 }
 
 void HalfDuplexChannel::PumpTaskRunloop() {
-  constexpr int QUEUE_LENGTH = 30;
   // TODO(ajwong): Incorrect queue size.
-  QueueSetHandle_t queue_set = xQueueCreateSet(QUEUE_LENGTH + 1);
+  QueueSetHandle_t queue_set = xQueueCreateSet(kRxQueueLength + kTxQueueLength);
   xQueueAddToSet(rx_queue_, queue_set);
   xQueueAddToSet(tx_queue_, queue_set);
 
@@ -76,7 +78,7 @@ void HalfDuplexChannel::PumpTaskRunloop() {
       Cn105Packet* packet = nullptr;
       xQueueReceive(active_member, &packet, 0);
       if (packet) {
-        tx_packets_.emplace(std::unique_ptr<Cn105Packet>(packet));
+        tx_packets_.emplace(packet);
       }
     } else if (active_member == rx_queue_) {
       uart_event_t event;
@@ -102,9 +104,12 @@ void HalfDuplexChannel::PumpTaskRunloop() {
 }
 
 void HalfDuplexChannel::DoSendPacket() {
-  std::unique_ptr<Cn105Packet> packet = std::move(tx_packets_.front());
-  uart_write_bytes(uart_, reinterpret_cast<const char*>(packet->raw_bytes()), packet->packet_size());
-  vTaskDelay(kBusyMs / portTICK_PERIOD_MS);
+  if (!tx_packets_.empty()) {
+    uart_write_bytes(uart_, reinterpret_cast<const char*>(tx_packets_.front()->raw_bytes()),
+                     tx_packets_.front()->packet_size());
+    tx_packets_.pop();
+    vTaskDelay(kBusyMs / portTICK_PERIOD_MS);
+  }
 }
 
 void HalfDuplexChannel::DispatchRxPacket() {
@@ -152,6 +157,8 @@ void HalfDuplexChannel::ProcessReceiveEvent(uart_event_t event) {
       abort();
       break;
     }
+  ESP_LOGI(kTag, "raw tstat: %d bytes", bytes);
+  ESP_LOG_BUFFER_HEX_LEVEL(kTag, current_rx_packet_->cursor(), bytes, ESP_LOG_INFO);
     current_rx_packet_->move_cursor(bytes);
     event_bytes_left -= bytes_to_read;
 

@@ -24,11 +24,12 @@ bool Cn105Packet::IsComplete() const {
 }
 
 bool Cn105Packet::IsChecksumValid() {
-  return CalculateChecksum(bytes_.data(), bytes_read_ - 1) ==
-    bytes_.at(bytes_read_);
+  // TODO(ajwong): Ensure no off-edge reads!
+  return CalculateChecksum(bytes_.data(), packet_size() - 1) ==
+    bytes_.at(packet_size() - 1);
 }
 
-uint8_t Cn105Packet::CalculateChecksum(uint8_t* bytes, size_t size) {
+uint8_t Cn105Packet::CalculateChecksum(const uint8_t* bytes, size_t size) {
   uint32_t checksum = 0xfc;
   for (size_t i = 0; i < size; ++i) {
     checksum -= bytes[i];

@@ -21,17 +21,6 @@ constexpr char kPacketConnect[] = {
 };
 */
 
-  /*
-void write_task(void* parameters) {
-    for (;;) {
-    ESP_LOGI(TAG, "cn105_sending: %u", counter);
-    uart_write_bytes(kCn105Uart, &counter, 1);
-    counter++;
-    vTaskDelay(100000 / portTICK_PERIOD_MS);
-  }
-}
-  */
-
 }  // namespace
 
 namespace hackvac {
@@ -79,20 +68,27 @@ void Controller::OnThermostatPacket(
 
     if (!thermostat_packet->IsComplete() ||
         !thermostat_packet->IsChecksumValid()) {
-      ESP_LOGE(kTag, "Bad packet");
+      ESP_LOGE(kTag, "Bad packet. complete %d expected checksum %x actual %x",
+               thermostat_packet->IsComplete(),
+               thermostat_packet->CalculateChecksum(
+                   thermostat_packet->raw_bytes(), thermostat_packet->packet_size() - 1),
+               thermostat_packet->raw_bytes()[thermostat_packet->packet_size() - 1]);
       // TODO(ajwong): have a log-packet function.
       return;
     }
 
     switch (thermostat_packet->type()) {
       case PacketType::kConnect:
+        ESP_LOGI(kTag, "Sending ConnectACK");
         thermostat_.EnqueuePacket(ConnectAckPacket::Create());
         break;
 
       case PacketType::kUpdate:
+        thermostat_.EnqueuePacket(UpdateAckPacket::Create());
         break;
 
       case PacketType::kInfo:
+        //thermostat_.EnqueuePacket(UpdateAckPacket::Create());
         break;
 
       default:

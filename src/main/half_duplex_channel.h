@@ -82,7 +82,7 @@ class HalfDuplexChannel {
   // packet is allowed to be sent. Seems to be about 4 bytes worth of time.
   //
   // This is also being used as the timeout for a receive channel going dead.
-  static constexpr int kBusyMs = 20;
+  static constexpr int kBusyMs = 10;
 
   // Name of the channel. Used for the pump task name.
   const char* name_ = nullptr;

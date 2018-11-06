@@ -1,5 +1,7 @@
 #include "half_duplex_channel.h"
 
+#include <alloca.h>
+
 #include "esp_log.h"
 
 namespace hackvac {
@@ -55,8 +57,10 @@ void HalfDuplexChannel::Start() {
 }
 
 void HalfDuplexChannel::EnqueuePacket(std::unique_ptr<Cn105Packet> packet) {
+  ESP_LOGE(kTag, "Enqueue %p\n", packet.get());
   // TODO(ajwong): Should this be a blocking call or should there be at timeout?
-  xQueueSendToBack(tx_queue_, packet.release(), (portTickType)portMAX_DELAY);
+  Cn105Packet* raw_packet = packet.release();
+  xQueueSendToBack(tx_queue_, &raw_packet, (portTickType)portMAX_DELAY);
 }
 
 // static
@@ -78,6 +82,7 @@ void HalfDuplexChannel::PumpTaskRunloop() {
       Cn105Packet* packet = nullptr;
       xQueueReceive(active_member, &packet, 0);
       if (packet) {
+        ESP_LOGE(kTag, "Dequeue tx packet %p\n", packet);
         tx_packets_.emplace(packet);
       }
     } else if (active_member == rx_queue_) {
@@ -94,17 +99,23 @@ void HalfDuplexChannel::PumpTaskRunloop() {
     // buffer, then the likely channel is clear for send. Take advantage of
     // it!
     if (!current_rx_packet_) {
+      /*
       size_t rx_bytes_;
       ESP_ERROR_CHECK(uart_get_buffered_data_len(uart_, &rx_bytes_));
       if (rx_bytes_ == 0) {
         DoSendPacket();
       }
+      */
+      DoSendPacket();
     }
   }
 }
 
 void HalfDuplexChannel::DoSendPacket() {
   if (!tx_packets_.empty()) {
+  ESP_LOGE(kTag, "Sending %p: ", tx_packets_.front().get());
+  ESP_LOG_BUFFER_HEX_LEVEL(kTag, tx_packets_.front()->raw_bytes(),
+                           tx_packets_.front()->packet_size(), ESP_LOG_INFO);
     uart_write_bytes(uart_, reinterpret_cast<const char*>(tx_packets_.front()->raw_bytes()),
                      tx_packets_.front()->packet_size());
     tx_packets_.pop();
@@ -144,31 +155,31 @@ void HalfDuplexChannel::ProcessReceiveEvent(uart_event_t event) {
   }
 
   // This is a data packet. Process it.
-  size_t event_bytes_left = event.size;
-  while (event_bytes_left > 0) {
+  uint8_t* buf = reinterpret_cast<uint8_t*>(alloca(event.size));
+  int bytes = uart_read_bytes(uart_, buf, event.size, 0);
+  if (bytes != event.size) {
+    ESP_LOGE(kTag, "Unable to read all bytes in event from UART");
+    abort();
+  }
+  ESP_LOGI(kTag, "raw tstat: %d bytes: ", bytes);
+  ESP_LOG_BUFFER_HEX_LEVEL(kTag, buf, bytes, ESP_LOG_INFO);
+
+  // If there is no packet found yet, scan for Cn105Packet::kPacketStartMarker
+  // discarding any other bytes until then.
+  for (int cursor = 0; cursor < bytes; ++cursor) {
     if (!current_rx_packet_) {
+      if (buf[cursor] != Cn105Packet::kPacketStartMarker) {
+        ESP_LOGI(kTag, "Skip: %x\n", buf[cursor]);
+        continue;
+      }
       current_rx_packet_ = std::make_unique<Cn105Packet>();
     }
-    size_t bytes_to_read = std::min(event_bytes_left,
-                                    current_rx_packet_->NextChunkSize());
-    int bytes = uart_read_bytes(uart_, current_rx_packet_->cursor(), bytes_to_read, 0);
-    if (bytes == 0) {
-      ESP_LOGE(kTag, "Unable to read from UART");
-      abort();
-      break;
-    }
-  ESP_LOGI(kTag, "raw tstat: %d bytes", bytes);
-  ESP_LOG_BUFFER_HEX_LEVEL(kTag, current_rx_packet_->cursor(), bytes, ESP_LOG_INFO);
-    current_rx_packet_->move_cursor(bytes);
-    event_bytes_left -= bytes_to_read;
+    current_rx_packet_->AppendByte(buf[cursor]);
 
     // On a completed packet, pass off and block for requisite gap
     // between sends.
     if (current_rx_packet_->IsComplete()) {
       DispatchRxPacket();
-      if (event_bytes_left != 0) {
-        ESP_LOGI(kTag, "Odd: %d bytes in RX DATA event after a complete packet", event_bytes_left);
-      }
     }
   }
 }

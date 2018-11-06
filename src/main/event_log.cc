@@ -22,7 +22,7 @@ std::atomic_int g_listener_count{};
 
 std::atomic<TaskHandle_t> g_publish_task{};
 RingbufHandle_t g_log_events;
-RingbufHandle_t g_protocol_events;
+//RingbufHandle_t g_protocol_events;
 vprintf_like_t g_original_logger;
 
 // 8kb of log data should be enough for anyone.
@@ -69,7 +69,8 @@ int LogHook(const char* fmt, va_list argp) {
     // Thus a 512 byte buffer takes minimal 35.6ms. Round to 40ms and give 2x
     // for contention with 1 other write.
     if (xRingbufferSend(g_log_events, &buf[0], strlen(buf) + 1, pdMS_TO_TICKS(80)) != pdTRUE) {
-      LogToOrig("event dropped %u\n", cur_event_num);;
+// TODO(ajwong): Figure out how to handle dropped events.
+//      LogToOrig("event dropped %u\n", cur_event_num);;
     }
   } else {
     LogToOrig("Could not render json %u\n", cur_event_num);
@@ -108,7 +109,7 @@ void DecrementListeners() {
 
 void EventLogInit() {
   g_log_events = xRingbufferCreate(kLogEventsSize, RINGBUF_TYPE_NOSPLIT);
-  g_protocol_events = xRingbufferCreate(kProtocolEventsSize, RINGBUF_TYPE_NOSPLIT);
+//  g_protocol_events = xRingbufferCreate(kProtocolEventsSize, RINGBUF_TYPE_NOSPLIT);
   g_original_logger = esp_log_set_vprintf(&LogHook);
   LogToOrig("^^vvv^^ Logger has been hooked ^^vvv^^\n");
   // TODO(awong): Look at xtensa_config.h for stack size.

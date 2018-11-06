@@ -40,6 +40,8 @@ enum class PacketType : uint8_t {
 //  The 0x01 and 0x30 are unknown extra tags that look constant.
 //  Possibly version information or other synchronization markers that can
 //  detect endianess?
+//  TODO(awong): The 0x01 looks like variable header length and 0x30 is the
+//               one byte in header. Maybe 0x30 means "should have checksum"
 //
 // Reference code:
 //   https://github.com/hadleyrich/MQMitsi/blob/master/mitsi.py
@@ -61,7 +63,7 @@ class Cn105Packet {
     //          Data for each is in a corresponding byte.
     //            Power = data + 3
     //            Mode = data + 4
-    //            Temp = data + 5
+    //            Temp = data + 5  (0x00 for temp seems to mean "max" not 31-celcius)
     //            Fan = data + 6
     //            Vane = data + 7
     //            Dir = data + 10
@@ -73,7 +75,7 @@ class Cn105Packet {
         : bytes_read_(kHeaderLength + data.size() + kChecksumSize) {
       static_assert(n < std::numeric_limits<uint8_t>::max() &&
                     n < kMaxPacketLength, "array too big");
-      bytes_[kStartMarkerPos] = 0xfc;
+      bytes_[kStartMarkerPos] = kPacketStartMarker;
       bytes_[kTypePos] = static_cast<uint8_t>(type);
       bytes_[2] = 0x01;  // TODO(ajwong): Make some constants.
       bytes_[3] = 0x30;
@@ -95,6 +97,9 @@ class Cn105Packet {
       unexpected_event_count_++;
     }
 
+    // Known value constants.
+    static constexpr uint8_t kPacketStartMarker = 0xfc;
+
     // Size constants.
     static constexpr size_t kHeaderLength = 5;
     static constexpr size_t kChecksumSize = 1;
@@ -104,6 +109,10 @@ class Cn105Packet {
     static constexpr size_t kTypePos = 1;
     static constexpr size_t kDataLenPos = 4;
     static constexpr size_t kDataStartPos = 5;
+
+    // For use by subclasses.
+    // TODO(ajwong): Consider another constructor.
+    static constexpr std::array<uint8_t, 16> kBlank16BytePacket = {};
 
     // Returns true if the header has been read. After this,
     // packet type and data length can be read.
@@ -118,7 +127,7 @@ class Cn105Packet {
     // Calculates the CN105 protocol checksum for the given bytes. The
     // checksum algorithm, based on reverse-engineering packet captures
     // from CN105 to a PAC444CN, is checksum = (0xfc - sum(data)) & 0xff
-    static uint8_t CalculateChecksum(uint8_t* bytes, size_t size);
+    static uint8_t CalculateChecksum(const uint8_t* bytes, size_t size);
 
     // Returns number of bytes that should be read next.
     size_t NextChunkSize() const;
@@ -132,6 +141,9 @@ class Cn105Packet {
 
     uint8_t* cursor() { return &bytes_[bytes_read_]; }
     void move_cursor(size_t amoumt) { bytes_read_ += amoumt; }
+    void AppendByte(uint8_t byte) {
+      bytes_.at(bytes_read_++) = byte;
+    }
 
     // https://github.com/SwiCago/HeatPump assumes 22 byte max for full packet
     // but format-wise, data_len can be 255 so max packet size may be 261.
@@ -165,6 +177,16 @@ class ConnectAckPacket : public Cn105Packet {
     }
     return std::move(packet);
     */
+  }
+};
+
+// This Ack seems to send 16-bytes of 0-data. Just for kicks.
+class UpdateAckPacket : public Cn105Packet {
+ public:
+  UpdateAckPacket() : Cn105Packet(PacketType::kUpdateAck, kBlank16BytePacket) {
+  }
+  static std::unique_ptr<UpdateAckPacket> Create() {
+    return std::make_unique<UpdateAckPacket>();
   }
 };
 

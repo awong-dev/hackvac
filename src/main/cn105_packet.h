@@ -17,6 +17,11 @@ enum class PacketType : uint8_t {
   kConnect = 0x5a,
   kConnectAck = 0x7a, 
 
+  // TODO(awong): Handle 0x5b/0x7b.
+  // https://github.com/SwiCago/HeatPump/issues/39
+  kExtendedConnect = 0x5b,
+  kExtendedConnectAck = 0x7b,
+
   // Update HVAC control status.
   kUpdate = 0x41, 
   kUpdateAck = 0x61, 

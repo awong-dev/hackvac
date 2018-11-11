@@ -18,7 +18,14 @@ enum class PacketType : uint8_t {
   kConnectAck = 0x7a, 
 
   // TODO(awong): Handle 0x5b/0x7b.
-  // https://github.com/SwiCago/HeatPump/issues/39
+  // https://github.com/SwiCago/HeatPump/issues/39#issuecomment-284234758
+  //
+  // Quoted from lekobob
+  // here is the initial connect exchange:
+  // fc,5a,01,30,02,ca,01,a8
+  // fc,7a,01,30,01,00,54
+  // fc,5b,01,30,01,c9,aa
+  // fc,7b,01,30,10,c9,03,00,20,00,14,07,75,0c,05,a0,be,94,be,a0,be,a9
   kExtendedConnect = 0x5b,
   kExtendedConnectAck = 0x7b,
 

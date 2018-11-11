@@ -83,6 +83,12 @@ void Controller::OnThermostatPacket(
         thermostat_.EnqueuePacket(ConnectAckPacket::Create());
         break;
 
+      case PacketType::kExtendedConnectAck:
+        // TODO(awong): See if there's a way to understand this packet.
+        // Ignoring it for now seems to still yield a good command stream.
+        //thermostat_.EnqueuePacket(UpdateAckPacket::Create());
+        break;
+
       case PacketType::kUpdate:
         thermostat_.EnqueuePacket(UpdateAckPacket::Create());
         break;

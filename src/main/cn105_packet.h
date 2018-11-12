@@ -7,6 +7,9 @@
 #include <array>
 #include <limits>
 #include <memory>
+#include <experimental/optional>
+
+#include "hvac_settings.h"
 
 namespace hackvac {
 
@@ -59,27 +62,6 @@ enum class PacketType : uint8_t {
 //   https://github.com/hadleyrich/MQMitsi/blob/master/mitsi.py
 class Cn105Packet {
   public:
-    // For UPDATE (0x41), the first data byte is the setting to change.
-    //   Control Update Extended
-    //   0x07 = set current room temperature
-    //            byte0 = room temp 0x1, 
-    //            byte1 = ???
-    //            room temp is first byte after.
-    //            NOTE: MHK1 sends 0x80 for data if setting is nonsense (negative)
-    //                  yielding 0x00 on byte0 bitflag.
-    //
-    //   Control Update
-    //   0x01 = update all standard settings. Next 2 bytes are bitfields.
-    //            byte0 = power 0x1, mode 0x2, temp 0x4, fan 0x8, vane 0x10, dir 0x80
-    //            byte1 = wiadevane 0x1 
-    //          Data for each is in a corresponding byte.
-    //            Power = data + 3
-    //            Mode = data + 4
-    //            Temp = data + 5  (0x00 for temp seems to mean "max" not 31-celcius)
-    //            Fan = data + 6
-    //            Vane = data + 7
-    //            Dir = data + 10
-
     Cn105Packet();
 
     template <size_t n>
@@ -146,6 +128,7 @@ class Cn105Packet {
 
     // Header accessors. Returns valid data when IsHeaderComplete() is true.
     PacketType type() const { return static_cast<PacketType>(bytes_[kTypePos]); }
+    uint8_t* data() { return &bytes_[kDataStartPos]; }
     size_t data_size() const { return bytes_[kDataLenPos]; }
 
     size_t packet_size() const { return kHeaderLength + data_size() + kChecksumSize; }
@@ -192,7 +175,118 @@ class ConnectAckPacket : public Cn105Packet {
   }
 };
 
-// This Ack seems to send 16-bytes of 0-data. Just for kicks.
+// For UPDATE (0x41), the first data byte is the setting to change.
+//   Control Update Extended (byte0)
+//   0x07 = set current room temperature
+//            byte0 = room temp 0x1, 
+//            byte1 = ???
+//            room temp is first byte after.
+//            NOTE: MHK1 sends 0x80 for data if setting is nonsense (negative)
+//                  yielding 0x00 on byte0 bitflag.
+//
+//   Control Update (byte0)
+//   0x01 = update all standard settings. Next 2 bytes are bitfields.
+//            byte1 = power 0x1, mode 0x2, temp 0x4, fan 0x8, vane 0x10, dir 0x80
+//            byte2 = wiadevane 0x1 
+//          Data for each is in a corresponding byte.
+//            byte3 = Power
+//            byte4 = Mode
+//            byte5 = Temp (0x00 for temp seems to mean "max" not 31-celcius)
+//            byte6 = Fan
+//            byte7 = Vane
+//            byte10 = Dir
+
+//  TODO(awong): Move this into an internal namespace.
+enum class UpdateBitfield : uint8_t {
+  kPowerFlag = 0x01,
+  kModeFlag = 0x02,
+  kTempFlag = 0x04,
+  kFanFlag = 0x08,
+  kVaneFlag = 0x10,
+  kDirectionFlag = 0x80,
+};
+enum class ExtendedUpdateBitfield : uint8_t {
+  kRoomTempFlag = 0x01,
+};
+template <typename T> struct ExtractConfig;
+template <> struct ExtractConfig<Power> {
+  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kPowerFlag;
+  constexpr static int kDataPos = 3;
+};
+template <> struct ExtractConfig<Mode> {
+  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kModeFlag;
+  constexpr static int kDataPos = 4;
+};
+template <> struct ExtractConfig<TargetTemp> {
+  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kTempFlag;
+  constexpr static int kDataPos = 5;
+};
+template <> struct ExtractConfig<Fan> {
+  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kFanFlag;
+  constexpr static int kDataPos = 6;
+};
+template <> struct ExtractConfig<Vane> {
+  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kVaneFlag;
+  constexpr static int kDataPos = 7;
+};
+template <> struct ExtractConfig<Direction> {
+  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kDirectionFlag;
+  constexpr static int kDataPos = 10;
+};
+// TODO(awong): Handle WideVane.
+class UpdatePacket {
+ public:
+  explicit UpdatePacket(Cn105Packet* packet) : packet_(packet) {}
+  ~UpdatePacket() = default;
+
+  template <typename T>
+  std::experimental::optional<T> GetSetting() {
+    if (!HasField(ExtractConfig<T>::kBitfield)) {
+      return {};
+    }
+    return static_cast<TargetTemp>(packet_->data()[ExtractConfig<T>::kDataPos]);
+  }
+  template <typename T>
+  void SetSetting(T value) {
+    SetField(ExtractConfig<T>::kBitfield);
+    packet_->data()[ExtractConfig<T>::kDataPos] = static_cast<uint8_t>(value);
+  }
+
+ private:
+  enum class UpdateType : uint8_t {
+    // Used for power, mode, target temp, fan, vane, direction.
+    kNormalSettings = 0x01,
+
+    // Used for room temperature.
+    kExtendedSettings = 0x07,
+  };
+  UpdateType update_type() { return static_cast<UpdateType>(packet_->data()[0]); }
+
+  // Field accessors.
+  // TODO(ajwong): widevane support on byte 2.
+  bool HasField(UpdateBitfield field) {
+    return update_type() == UpdateType::kNormalSettings &&
+      packet_->data()[1] & static_cast<uint8_t>(field);
+  }
+  void SetField(UpdateBitfield field) {
+    packet_->data()[0] = static_cast<uint8_t>(UpdateType::kNormalSettings);
+    packet_->data()[1] |= static_cast<uint8_t>(field);
+  }
+  bool HasField(ExtendedUpdateBitfield field) {
+    return update_type() == UpdateType::kExtendedSettings &&
+      packet_->data()[1] & static_cast<uint8_t>(field);
+  }
+  void SetField(ExtendedUpdateBitfield field) {
+    packet_->data()[0] = static_cast<uint8_t>(UpdateType::kExtendedSettings);
+    packet_->data()[1] |= static_cast<uint8_t>(field);
+  }
+
+  // Not owned.
+  Cn105Packet* packet_;
+};
+
+// This Ack seems to always send 16-bytes of 0-data. Doing it just for
+// kicks I guess.
 class UpdateAckPacket : public Cn105Packet {
  public:
   UpdateAckPacket() : Cn105Packet(PacketType::kUpdateAck, kBlank16BytePacket) {

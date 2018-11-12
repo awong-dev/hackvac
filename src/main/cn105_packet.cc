@@ -1,6 +1,7 @@
 #include "cn105_packet.h"
 
 namespace hackvac {
+constexpr std::array<uint8_t, 16> Cn105Packet::kBlank16BytePacket;
 
 Cn105Packet::Cn105Packet() = default;
 Cn105Packet::~Cn105Packet() = default;

@@ -75,7 +75,6 @@ void HalfDuplexChannel::PumpTaskRunloop() {
   xQueueAddToSet(rx_queue_, queue_set);
   xQueueAddToSet(tx_queue_, queue_set);
 
-  Cn105Packet packet;
   for (;;) {
     QueueSetMemberHandle_t active_member = 
       xQueueSelectFromSet(queue_set, kBusyMs / portTICK_PERIOD_MS);

@@ -15,15 +15,29 @@ constexpr uart_port_t kTstatUart = UART_NUM_2;
 constexpr gpio_num_t kTstatTxPin = GPIO_NUM_5;
 constexpr gpio_num_t kTstatRxPin = GPIO_NUM_17;
 
-/*
-constexpr char kPacketConnect[] = {
-  0xfc, 0x5a, 0x01, 0x30, 0x02, 0xca, 0x01, 0xa8
-};
-*/
-
 }  // namespace
 
 namespace hackvac {
+
+Controller::SharedData::SharedData()
+  : mux_(portMUX_INITIALIZER_UNLOCKED) {
+}
+
+HvacSettings Controller::SharedData::GetHvacSettings() const {
+  HvacSettings settings;
+
+  taskENTER_CRITICAL(&mux_);
+  settings = hvac_settings_;
+  taskEXIT_CRITICAL(&mux_);
+
+  return settings;
+}
+
+void Controller::SharedData::SetHvacSettings(const HvacSettings& hvac_settings) {
+  taskENTER_CRITICAL(&mux_);
+  hvac_settings_ = hvac_settings;
+  taskEXIT_CRITICAL(&mux_);
+}
 
 Controller::Controller()
   : hvac_control_("hvac_ctl", kCn105Uart, kCn105TxPin, kCn105RxPin,
@@ -90,16 +104,42 @@ void Controller::OnThermostatPacket(
         break;
 
       case PacketType::kUpdate:
-        thermostat_.EnqueuePacket(UpdateAckPacket::Create());
-        break;
+        {
+          // TODO(awong): Extract into a process function like CreateInfoAck().
+          UpdatePacket update(thermostat_packet.get());
+          HvacSettings new_settings = shared_data_.GetHvacSettings();
+          update.ApplyUpdate(&new_settings);
+          shared_data_.SetHvacSettings(new_settings);
+          thermostat_.EnqueuePacket(UpdateAckPacket::Create());
+          break;
+        }
 
       case PacketType::kInfo:
-        //thermostat_.EnqueuePacket(UpdateAckPacket::Create());
+        thermostat_.EnqueuePacket(
+            CreateInfoAck(InfoPacket(thermostat_packet.get())));
         break;
 
       default:
         break;
     }
+  }
+}
+
+std::unique_ptr<Cn105Packet> Controller::CreateInfoAck(InfoPacket info) {
+  switch (info.type()) {
+    case InfoType::kSettings:
+      return InfoAckPacket::Create(shared_data_.GetHvacSettings());
+
+      // TODO(awong): Implement.
+    case InfoType::kExtendedSettings:
+    case InfoType::kTimers:
+    case InfoType::kStatus:
+    case InfoType::kEnterStandby:
+    default:
+      // Unknown packet type. Ack with a status.
+      //
+      // TODO(awong): Make this actaully a status ack.
+      return InfoAckPacket::Create(shared_data_.GetHvacSettings());
   }
 }
 

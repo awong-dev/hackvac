@@ -49,7 +49,7 @@ void HalfDuplexChannel::Start() {
   uart_set_pin(uart_, tx_pin_, rx_pin_, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
   // TODO(ajwong): Pick the right sizes and dedup constants with QueueSetHandle_t.
-  constexpr int kBufSize = 1024; 
+  constexpr int kBufSize = 128; 
   uart_driver_install(uart_, kBufSize * 2, kBufSize * 2, kRxQueueLength, &rx_queue_, 0);
 
   // TODO(ajwong): priority should be passed in.
@@ -58,6 +58,7 @@ void HalfDuplexChannel::Start() {
 
 void HalfDuplexChannel::EnqueuePacket(std::unique_ptr<Cn105Packet> packet) {
   ESP_LOGE(kTag, "Enqueue %p\n", packet.get());
+//  ESP_LOG_BUFFER_HEX_LEVEL(kTag, packet->raw_bytes(), packet->packet_size(), ESP_LOG_INFO); 
   // TODO(ajwong): Should this be a blocking call or should there be at timeout?
   Cn105Packet* raw_packet = packet.release();
   xQueueSendToBack(tx_queue_, &raw_packet, (portTickType)portMAX_DELAY);
@@ -161,8 +162,6 @@ void HalfDuplexChannel::ProcessReceiveEvent(uart_event_t event) {
     ESP_LOGE(kTag, "Unable to read all bytes in event from UART");
     abort();
   }
-  ESP_LOGI(kTag, "raw tstat: %d bytes: ", bytes);
-  ESP_LOG_BUFFER_HEX_LEVEL(kTag, buf, bytes, ESP_LOG_INFO);
 
   // If there is no packet found yet, scan for Cn105Packet::kPacketStartMarker
   // discarding any other bytes until then.

@@ -76,6 +76,15 @@ enum class WideVane : uint8_t {
   kSwing = 0x0c,        //
 };
 
+enum class InfoType : uint8_t {
+  kSettings = 0x02,
+  kExtendedSettings = 0x03,
+  // 0x04 is unknown
+  kTimers = 0x05,
+  kStatus = 0x06,
+  kEnterStandby = 0x09,  // maybe?
+};
+
 struct HvacSettings {
   HvacSettings()
     : power(Power::kOff),

@@ -57,6 +57,9 @@ class Controller {
   // Runs on the |thermostat_| channel's message pump task.
   void OnThermostatPacket(std::unique_ptr<Cn105Packet> thermostat_packet);
 
+  // Generates an Ack for an info packet.
+  std::unique_ptr<Cn105Packet> CreateInfoAck(InfoPacket info);
+
   // Sets the state.
   bool is_passthru_ = false;
 
@@ -66,8 +69,20 @@ class Controller {
   // Channel talking to the thermosat.
   HalfDuplexChannel thermostat_;
 
-  // Current settings of the HVAC unit.
-  HvacSettings hvac_settings_;
+  // Ensures locked access to shared fields.
+  class SharedData {
+   public:
+    SharedData();
+    HvacSettings GetHvacSettings() const;
+    void SetHvacSettings(const HvacSettings& hvac_settings);
+
+   private:
+    mutable portMUX_TYPE mux_;
+    // Current settings of the HVAC unit.
+    HvacSettings hvac_settings_;
+  };
+
+  SharedData shared_data_;
 };
 
 }  // namespace hackvac

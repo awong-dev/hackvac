@@ -55,8 +55,18 @@ enum class Fan : uint8_t {
   kPower5 = 0x06,
 };
 
+enum class Vane : uint8_t {
+  kAuto = 0x00,
+  kPower1 = 0x01,
+  kPower2 = 0x02,
+  kPower3 = 0x03,
+  kPower4 = 0x04,
+  kPower5 = 0x05,
+  kSwing = 0x07,
+};
+
 // From https://github.com/hadleyrich/MQMitsi/blob/master/mitsi.py#L95
-enum class Direction : uint8_t {
+enum class WideVane : uint8_t {
   kFarLeft = 0x01,      // <<
   kLeft = 0x02,         // <
   kCenter = 0x03,       // |
@@ -66,14 +76,22 @@ enum class Direction : uint8_t {
   kSwing = 0x0c,        //
 };
 
-enum class Vane : uint8_t {
-  kAuto = 0x00,
-  kPower1 = 0x01,
-  kPower2 = 0x02,
-  kPower3 = 0x03,
-  kPower4 = 0x04,
-  kPower5 = 0x05,
-  kSwing = 0x07,
+struct HvacSettings {
+  HvacSettings()
+    : power(Power::kOff),
+      mode(Mode::kAuto),
+      target_temp(TargetTemp::k20C),
+      fan(Fan::kAuto),
+      vane(Vane::kAuto),
+      wide_vane(WideVane::kCenter) {
+  }
+
+  Power power;
+  Mode mode;
+  TargetTemp target_temp;
+  Fan fan;
+  Vane vane;
+  WideVane wide_vane;
 };
 
 }  // namespace hackvac

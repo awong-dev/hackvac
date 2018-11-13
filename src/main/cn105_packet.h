@@ -191,7 +191,7 @@ class ConnectAckPacket : public Cn105Packet {
 //          Data for each is in a corresponding byte.
 //            byte3 = Power
 //            byte4 = Mode
-//            byte5 = Temp (0x00 for temp seems to mean "max" not 31-celcius)
+//            byte5 = Temp (0x00 for temp seems to mean "max" and not 31-celcius)
 //            byte6 = Fan
 //            byte7 = Vane
 //            byte10 = Dir
@@ -203,7 +203,7 @@ enum class UpdateBitfield : uint8_t {
   kTempFlag = 0x04,
   kFanFlag = 0x08,
   kVaneFlag = 0x10,
-  kDirectionFlag = 0x80,
+  kWideVaneFlag = 0x80,
 };
 enum class ExtendedUpdateBitfield : uint8_t {
   kRoomTempFlag = 0x01,
@@ -229,15 +229,15 @@ template <> struct ExtractConfig<Vane> {
   constexpr static UpdateBitfield kBitfield = UpdateBitfield::kVaneFlag;
   constexpr static int kDataPos = 7;
 };
-template <> struct ExtractConfig<Direction> {
-  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kDirectionFlag;
+template <> struct ExtractConfig<WideVane> {
+  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kWideVaneFlag;
   constexpr static int kDataPos = 10;
 };
+
 // TODO(awong): Handle WideVane.
 class UpdatePacket {
  public:
   explicit UpdatePacket(Cn105Packet* packet) : packet_(packet) {}
-  ~UpdatePacket() = default;
 
   template <typename T>
   std::experimental::optional<T> GetSetting() {
@@ -294,6 +294,51 @@ class UpdateAckPacket : public Cn105Packet {
   static std::unique_ptr<UpdateAckPacket> Create() {
     return std::make_unique<UpdateAckPacket>();
   }
+};
+
+class InfoAckPacket {
+ public:
+  enum class InfoAckType : uint8_t {
+    kGetSettings = 0x02,
+    kGetRoomTemp = 0x03,
+    // 0x04 is unknown
+    kGetTimers = 0x05,
+    kGetStatus = 0x06,
+    kEnterStandby = 0x09,  // maybe?
+  };
+
+  explicit InfoAckPacket(Cn105Packet* packet) : packet_(packet) {}
+
+  InfoAckType type() const { return static_cast<InfoAckType>(packet_->data()[0]); }
+
+  std::experimental::optional<HvacSettings> settings() const {
+    if (type() != InfoAckType::kGetStatus) {
+      return {};
+    }
+
+    // TODO(awong): I assume bitfields 1 and 2 are the mirror of the update packet
+    // for what settings have been returned.
+    HvacSettings settings;
+    settings.power = static_cast<Power>(packet_->data()[3]);
+    bool hasISee = packet_->data()[4] > 0x08;  // Affects mode field.
+    settings.mode = static_cast<Mode>(packet_->data()[4] - (hasISee ? 0x08 : 0));
+    settings.target_temp = static_cast<TargetTemp>(packet_->data()[5]);
+    settings.fan = static_cast<Fan>(packet_->data()[6]);
+    settings.vane = static_cast<Vane>(packet_->data()[7]);
+    settings.wide_vane = static_cast<WideVane>(packet_->data()[7]);
+
+    // Handle higher resoluation temperature field. This overrides data()[5].
+    if (packet_->data()[11]) {
+      // TODO(awong): This loses 0.5C of resolution. Fix.
+      uint8_t high_res_target_temp = (packet_->data()[11] - 128) / 2;
+      settings.target_temp = static_cast<TargetTemp>(high_res_target_temp);
+    }
+
+    return settings;
+  }
+
+ private:
+  Cn105Packet* packet_;
 };
 
 }  // namespace hackvac

@@ -65,6 +65,9 @@ class Controller {
 
   // Channel talking to the thermosat.
   HalfDuplexChannel thermostat_;
+
+  // Current settings of the HVAC unit.
+  HvacSettings hvac_settings_;
 };
 
 }  // namespace hackvac

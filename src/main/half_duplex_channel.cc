@@ -90,6 +90,7 @@ void HalfDuplexChannel::PumpTaskRunloop() {
       xQueueReceive(rx_queue_, &event, 0);
       ProcessReceiveEvent(event);
     } else {
+      // This is a timeout.
       if (current_rx_packet_) {
         DispatchRxPacket();
       }
@@ -98,16 +99,19 @@ void HalfDuplexChannel::PumpTaskRunloop() {
     // If there is no |current_rx_packet_| and there are no bytes in the rx
     // buffer, then the likely channel is clear for send. Take advantage of
     // it!
-    if (!current_rx_packet_) {
+    //
+    // TODO(awong): This is a TERRIBLE idea it turns out. If there's noise
+    // in the RX line, this will starve sends.
       /*
+    if (!current_rx_packet_) {
       size_t rx_bytes_;
       ESP_ERROR_CHECK(uart_get_buffered_data_len(uart_, &rx_bytes_));
       if (rx_bytes_ == 0) {
         DoSendPacket();
       }
-      */
-      DoSendPacket();
     }
+      */
+    DoSendPacket();
   }
 }
 

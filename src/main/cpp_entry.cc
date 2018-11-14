@@ -1,8 +1,8 @@
 #include "cpp_entry.h"
 
 #include "boot_state.h"
-#include "cn105.h"
 #include "constants.h"
+#include "controller.h"
 #include "event_log.h"
 #include "httpd.h"
 #include "wifi.h"

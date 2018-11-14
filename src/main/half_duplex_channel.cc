@@ -10,20 +10,37 @@ namespace {
 // TODO(ajwong): Revisit queue lengths.
 constexpr int kRxQueueLength = 30;
 constexpr int kTxQueueLength = 5;
-constexpr char kTag[] = "HalfDuplexChannel";
+constexpr char kTag[] = "chan";
 }  // namespace
 
 HalfDuplexChannel::HalfDuplexChannel(const char *name,
                                      uart_port_t uart,
                                      gpio_num_t tx_pin,
                                      gpio_num_t rx_pin,
-                                     OnPacketCallback callback)
+                                     OnPacketCallback callback,
+                                     gpio_num_t tx_debug_pin,
+                                     gpio_num_t rx_debug_pin)
   : name_(name),
     uart_(uart),
     tx_pin_(tx_pin),
     rx_pin_(rx_pin),
     on_packet_cb_(callback),
+    tx_debug_pin_(tx_debug_pin),
+    rx_debug_pin_(rx_debug_pin),
     tx_queue_(xQueueCreate(kTxQueueLength, sizeof(Cn105Packet*))) {
+  if (tx_debug_pin_ != GPIO_NUM_MAX || rx_debug_pin_ != GPIO_NUM_MAX) {
+    gpio_config_t io_conf;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.pin_bit_mask =
+      ((1ULL << tx_debug_pin_) | (1ULL << rx_debug_pin_))
+      & ((1ULL << GPIO_NUM_MAX) - 1);
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    gpio_config(&io_conf);
+    SetTxDebug(false);
+    SetRxDebug(false);
+  }
 }
 
 HalfDuplexChannel::~HalfDuplexChannel() {
@@ -57,8 +74,6 @@ void HalfDuplexChannel::Start() {
 }
 
 void HalfDuplexChannel::EnqueuePacket(std::unique_ptr<Cn105Packet> packet) {
-  ESP_LOGE(kTag, "Enqueue %p\n", packet.get());
-//  ESP_LOG_BUFFER_HEX_LEVEL(kTag, packet->raw_bytes(), packet->packet_size(), ESP_LOG_INFO); 
   // TODO(ajwong): Should this be a blocking call or should there be at timeout?
   Cn105Packet* raw_packet = packet.release();
   xQueueSendToBack(tx_queue_, &raw_packet, (portTickType)portMAX_DELAY);
@@ -77,12 +92,11 @@ void HalfDuplexChannel::PumpTaskRunloop() {
 
   for (;;) {
     QueueSetMemberHandle_t active_member = 
-      xQueueSelectFromSet(queue_set, kBusyMs / portTICK_PERIOD_MS);
+      xQueueSelectFromSet(queue_set, (kBusyMs * 3) / portTICK_PERIOD_MS);
     if (active_member == tx_queue_) {
       Cn105Packet* packet = nullptr;
       xQueueReceive(active_member, &packet, 0);
       if (packet) {
-        ESP_LOGE(kTag, "Dequeue tx packet %p\n", packet);
         tx_packets_.emplace(packet);
       }
     } else if (active_member == rx_queue_) {
@@ -92,6 +106,7 @@ void HalfDuplexChannel::PumpTaskRunloop() {
     } else {
       // This is a timeout.
       if (current_rx_packet_) {
+        ESP_LOGI(kTag, "p to: %p", current_rx_packet_.get());
         DispatchRxPacket();
       }
     }
@@ -117,18 +132,21 @@ void HalfDuplexChannel::PumpTaskRunloop() {
 
 void HalfDuplexChannel::DoSendPacket() {
   if (!tx_packets_.empty()) {
-  ESP_LOGE(kTag, "Sending %p: ", tx_packets_.front().get());
-  ESP_LOG_BUFFER_HEX_LEVEL(kTag, tx_packets_.front()->raw_bytes(),
-                           tx_packets_.front()->packet_size(), ESP_LOG_INFO);
+    ESP_LOGI(kTag, "Sending: %d bytes", tx_packets_.front()->packet_size());
+    ESP_LOG_BUFFER_HEX_LEVEL(kTag, tx_packets_.front()->raw_bytes(),
+                             tx_packets_.front()->packet_size(), ESP_LOG_INFO);
+    SetTxDebug(true);
     uart_write_bytes(uart_, reinterpret_cast<const char*>(tx_packets_.front()->raw_bytes()),
                      tx_packets_.front()->packet_size());
     tx_packets_.pop();
     vTaskDelay(kBusyMs / portTICK_PERIOD_MS);
+    SetTxDebug(false);
   }
 }
 
 void HalfDuplexChannel::DispatchRxPacket() {
   on_packet_cb_(std::move(current_rx_packet_));
+  SetRxDebug(false);
   vTaskDelay(kBusyMs / portTICK_PERIOD_MS);
 }
 
@@ -169,20 +187,36 @@ void HalfDuplexChannel::ProcessReceiveEvent(uart_event_t event) {
   // If there is no packet found yet, scan for Cn105Packet::kPacketStartMarker
   // discarding any other bytes until then.
   for (int cursor = 0; cursor < bytes; ++cursor) {
+//    ESP_LOGI(kTag, "r: %x", buf[cursor]);
     if (!current_rx_packet_) {
       if (buf[cursor] != Cn105Packet::kPacketStartMarker) {
-        ESP_LOGI(kTag, "Skip: %x\n", buf[cursor]);
+ //       ESP_LOGI(kTag, "s: %x", buf[cursor]);
         continue;
       }
       current_rx_packet_ = std::make_unique<Cn105Packet>();
+      ESP_LOGI(kTag, "p s: %x %p", buf[cursor], current_rx_packet_.get());
+      SetRxDebug(true);
     }
     current_rx_packet_->AppendByte(buf[cursor]);
 
     // On a completed packet, pass off and block for requisite gap
     // between sends.
     if (current_rx_packet_->IsComplete()) {
+      ESP_LOGI(kTag, "p d: %p", current_rx_packet_.get());
       DispatchRxPacket();
     }
+  }
+}
+
+void HalfDuplexChannel::SetTxDebug(bool is_high) {
+  if (tx_debug_pin_ != GPIO_NUM_MAX) {
+    ESP_ERROR_CHECK(gpio_set_level(tx_debug_pin_, is_high));
+  }
+}
+
+void HalfDuplexChannel::SetRxDebug(bool is_high) {
+  if (rx_debug_pin_ != GPIO_NUM_MAX) {
+    ESP_ERROR_CHECK(gpio_set_level(rx_debug_pin_, is_high));
   }
 }
 

@@ -37,6 +37,13 @@ void Controller::SharedData::SetHvacSettings(const HvacSettings& hvac_settings) 
   taskENTER_CRITICAL(&mux_);
   hvac_settings_ = hvac_settings;
   taskEXIT_CRITICAL(&mux_);
+  ESP_LOGI(kTag, "settings: p:%d m:%d, t:%d, f:%d, v:%d, wv:%d",
+           static_cast<int32_t>(hvac_settings.power),
+           static_cast<int32_t>(hvac_settings.mode),
+           31 - static_cast<int32_t>(hvac_settings.target_temp),
+           static_cast<int32_t>(hvac_settings.fan),
+           static_cast<int32_t>(hvac_settings.vane),
+           static_cast<int32_t>(hvac_settings.wide_vane));
 }
 
 Controller::Controller()
@@ -47,7 +54,9 @@ Controller::Controller()
     thermostat_("tstat", kTstatUart, kTstatTxPin, kTstatRxPin,
                 [this](std::unique_ptr<Cn105Packet> packet) {
                   this->OnThermostatPacket(std::move(packet));
-                }) {
+                },
+                GPIO_NUM_23,
+                GPIO_NUM_22) {
 }
 
 Controller::~Controller() = default;
@@ -97,10 +106,12 @@ void Controller::OnThermostatPacket(
         thermostat_.EnqueuePacket(ConnectAckPacket::Create());
         break;
 
-      case PacketType::kExtendedConnectAck:
+      case PacketType::kExtendedConnect:
+        ESP_LOGI(kTag, "Sending ExtendedConnectACK");
         // TODO(awong): See if there's a way to understand this packet.
-        // Ignoring it for now seems to still yield a good command stream.
-        //thermostat_.EnqueuePacket(UpdateAckPacket::Create());
+        // Ignoring it for now seems to cause Pac444CN-1 to send 2 attempts
+        // and then give up and move on.
+        thermostat_.EnqueuePacket(ExtendedConnectAckPacket::Create());
         break;
 
       case PacketType::kUpdate:
@@ -110,11 +121,13 @@ void Controller::OnThermostatPacket(
           HvacSettings new_settings = shared_data_.GetHvacSettings();
           update.ApplyUpdate(&new_settings);
           shared_data_.SetHvacSettings(new_settings);
+          ESP_LOGI(kTag, "Sending UpdateACK");
           thermostat_.EnqueuePacket(UpdateAckPacket::Create());
           break;
         }
 
       case PacketType::kInfo:
+        ESP_LOGI(kTag, "Sending InfoACK");
         thermostat_.EnqueuePacket(
             CreateInfoAck(InfoPacket(thermostat_packet.get())));
         break;

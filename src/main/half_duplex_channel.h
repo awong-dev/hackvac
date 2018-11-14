@@ -23,11 +23,11 @@ namespace hackvac {
 //   (1) Any packet send will be delayed until 10ms after the most
 //       recent packet read/send completion.
 //   (2) Packet sending/receiving expects to take turns. If 2 sends are
-//       issued in quick succession, the second send will fail if
-//       a response has not been heard.
+//       issued in quick succession, an attempt to receive will occur
+//       before the next send.
 //   (3) If more than 20ms (what's the right timeout?) have passed with
-//       no response, then the channel is considered reset and sends may
-//       again occur.
+//       no response, then the a packet is considered received and processed
+//       regardless of what the format looks like.
 class HalfDuplexChannel {
 // TODO(ajwong): Need algorithm for reading. Read until packet ends or timeout happens.
 // Up until the header, it may timeout. After the header, we know how many ms until
@@ -40,11 +40,24 @@ class HalfDuplexChannel {
   using OnPacketCallback = std::function<void(std::unique_ptr<Cn105Packet>)>;
 
   // TODO(ajwong): Missing priority.
+  //
+  // Creaes a half-duplex channel.
+  // |name| is used for logging and naming the message pumping task.
+  // |uart| is the hardware uart to use.
+  // |tx_pin| and |rx_pin| specify the gpio pin to use.
+  // |callback| is the handler called when a packet is received, or if a byte
+  //     stream times out before a full packet is parsed.  
+  // |tx_debug_pin| and |rx_debug_pin| if switches high during on each packet
+  //     sent or receive respectively. This allows an external logic analyzer
+  //     to measuring the timing of the channel logic vs when it shows up at
+  //     a uart.
   HalfDuplexChannel(const char* name,
                     uart_port_t uart,
                     gpio_num_t tx_pin,
                     gpio_num_t rx_pin,
-                    OnPacketCallback callback);
+                    OnPacketCallback callback,
+                    gpio_num_t tx_debug_pin = GPIO_NUM_MAX,
+                    gpio_num_t rx_debug_pin = GPIO_NUM_MAX);
   ~HalfDuplexChannel();
 
   // Starts sending/receiving data from the UART. After this, |on_packet_cb_|
@@ -78,6 +91,12 @@ class HalfDuplexChannel {
   // is complete, return false.
   void ProcessReceiveEvent(uart_event_t event);
 
+  // Sets the |tx_debug_pin_| to |is_high|.
+  void SetTxDebug(bool is_high);
+
+  // Sets the |rx_debug_pin_| to |is_high|.
+  void SetRxDebug(bool is_high);
+
   // The delay to wait between the last send or last receive before the next
   // packet is allowed to be sent. Seems to be about 4 bytes worth of time.
   //
@@ -98,6 +117,12 @@ class HalfDuplexChannel {
 
   // Callback to invoke when a packet is completed.
   OnPacketCallback on_packet_cb_;
+
+  // Pin to hold high when sending a packet.
+  gpio_num_t tx_debug_pin_ = GPIO_NUM_MAX;
+
+  // Pin to hold high when receiving a packet.
+  gpio_num_t rx_debug_pin_ = GPIO_NUM_MAX;
 
   // Queue that receives the data from the UART.
   QueueHandle_t rx_queue_ = nullptr;

@@ -161,17 +161,19 @@ class ConnectAckPacket : public Cn105Packet {
   static std::unique_ptr<Cn105Packet> Create() {
     static constexpr std::array<uint8_t, 1> data = { 0x00 };
     return std::make_unique<Cn105Packet>(PacketType::kConnectAck, data);
-    /*
-    static constexpr char kPacketConnectAck[] = {
-      0xfc, 0x7a, 0x01, 0x30, 0x01, 0x00, 0x54,// 0x00,  // This is what feels like he conn ack packet.
-//      0x38, 0xec, 0xfe, 0x3f, 0xd8, 0x04, 0x10, 0x40, 0xc0, 0x87, 0xfe, 0x3f, 0x00, 0x00  // But actually we need all of this.
-    };
-    for (size_t i = 0; i < sizeof(kPacketConnectAck); ++i) {
-      *packet->cursor() = kPacketConnectAck[i];
-      packet->move_cursor(1);
-    }
-    return std::move(packet);
-    */
+  }
+};
+
+class ExtendedConnectAckPacket : public Cn105Packet {
+ public:
+  static std::unique_ptr<Cn105Packet> Create() {
+    // TODO(awong): echo back the 0xc9 from the ExtendedConnectPacket.
+    static constexpr std::array<uint8_t, 16> data = {
+      0xc9, 0x03, 0x00, 0x20,
+      0x00, 0x14, 0x07, 0x75,
+      0x0c, 0x05, 0xa0, 0xbe,
+      0x94, 0xbe, 0xa0, 0xbe };
+    return std::make_unique<Cn105Packet>(PacketType::kExtendedConnectAck, data);
   }
 };
 

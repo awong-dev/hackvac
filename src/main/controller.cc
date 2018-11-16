@@ -2,6 +2,7 @@
 
 #include "driver/uart.h"
 #include "esp_log.h"
+#include "event_log.h"
 
 namespace {
 constexpr char kTag[] = "controller";
@@ -81,59 +82,51 @@ void Controller::OnHvacControlPacket(
 
 void Controller::OnThermostatPacket(
     std::unique_ptr<Cn105Packet> thermostat_packet) {
-  ESP_LOGI(kTag, "tstat: %d bytes", thermostat_packet->packet_size());
-  ESP_LOG_BUFFER_HEX_LEVEL(kTag, thermostat_packet->raw_bytes(),
-                           thermostat_packet->raw_bytes_size(), ESP_LOG_INFO);
   if (is_passthru_) {
     hvac_control_.EnqueuePacket(std::move(thermostat_packet));
   } else {
-    if (thermostat_packet->IsJunk() ||
-        !thermostat_packet->IsComplete() ||
-        !thermostat_packet->IsChecksumValid()) {
-      ESP_LOGE(kTag, "Bad packet. junk: %d complete %d expected checksum %x actual %x",
-               thermostat_packet->IsJunk(),
-               thermostat_packet->IsComplete(),
-               thermostat_packet->CalculateChecksum(
-                   thermostat_packet->raw_bytes(), thermostat_packet->packet_size() - 1),
-               thermostat_packet->raw_bytes()[thermostat_packet->packet_size() - 1]);
-      return;
-    }
+    if (!thermostat_packet->IsJunk() &&
+        thermostat_packet->IsComplete() &&
+        thermostat_packet->IsChecksumValid()) {
 
-    switch (thermostat_packet->type()) {
-      case PacketType::kConnect:
-        ESP_LOGI(kTag, "Sending ConnectACK");
-        thermostat_.EnqueuePacket(ConnectAckPacket::Create());
-        break;
-
-      case PacketType::kExtendedConnect:
-        ESP_LOGI(kTag, "Sending ExtendedConnectACK");
-        // TODO(awong): See if there's a way to understand this packet.
-        // Ignoring it for now seems to cause Pac444CN-1 to send 2 attempts
-        // and then give up and move on.
-        thermostat_.EnqueuePacket(ExtendedConnectAckPacket::Create());
-        break;
-
-      case PacketType::kUpdate:
-        {
-          // TODO(awong): Extract into a process function like CreateInfoAck().
-          UpdatePacket update(thermostat_packet.get());
-          HvacSettings new_settings = shared_data_.GetHvacSettings();
-          update.ApplyUpdate(&new_settings);
-          shared_data_.SetHvacSettings(new_settings);
-          ESP_LOGI(kTag, "Sending UpdateACK");
-          thermostat_.EnqueuePacket(UpdateAckPacket::Create());
+      switch (thermostat_packet->type()) {
+        case PacketType::kConnect:
+          ESP_LOGI(kTag, "Sending ConnectACK");
+          thermostat_.EnqueuePacket(ConnectAckPacket::Create());
           break;
-        }
 
-      case PacketType::kInfo:
-        ESP_LOGI(kTag, "Sending InfoACK");
-        thermostat_.EnqueuePacket(
-            CreateInfoAck(InfoPacket(thermostat_packet.get())));
-        break;
+        case PacketType::kExtendedConnect:
+          ESP_LOGI(kTag, "Sending ExtendedConnectACK");
+          // TODO(awong): See if there's a way to understand this packet.
+          // Ignoring it for now seems to cause Pac444CN-1 to send 2 attempts
+          // and then give up and move on.
+          thermostat_.EnqueuePacket(ExtendedConnectAckPacket::Create());
+          break;
 
-      default:
-        break;
+        case PacketType::kUpdate:
+          {
+            // TODO(awong): Extract into a process function like CreateInfoAck().
+            UpdatePacket update(thermostat_packet.get());
+            HvacSettings new_settings = shared_data_.GetHvacSettings();
+            update.ApplyUpdate(&new_settings);
+            shared_data_.SetHvacSettings(new_settings);
+            ESP_LOGI(kTag, "Sending UpdateACK");
+            thermostat_.EnqueuePacket(UpdateAckPacket::Create());
+            break;
+          }
+
+        case PacketType::kInfo:
+          ESP_LOGI(kTag, "Sending InfoACK");
+          thermostat_.EnqueuePacket(
+              CreateInfoAck(InfoPacket(thermostat_packet.get())));
+          break;
+
+        default:
+          break;
+      }
     }
+
+    LogPacket("tstat", PacketDirection::kRx, std::move(thermostat_packet));
   }
 }
 

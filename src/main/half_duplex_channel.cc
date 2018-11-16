@@ -3,6 +3,7 @@
 #include <alloca.h>
 
 #include "esp_log.h"
+#include "event_log.h"
 
 namespace hackvac {
 
@@ -132,15 +133,12 @@ void HalfDuplexChannel::PumpTaskRunloop() {
 
 void HalfDuplexChannel::DoSendPacket() {
   if (!tx_packets_.empty()) {
-    ESP_LOGI(kTag, "Sending: %d bytes", tx_packets_.front()->packet_size());
-    ESP_LOG_BUFFER_HEX_LEVEL(kTag,
-                             tx_packets_.front()->raw_bytes(),
-                             tx_packets_.front()->raw_bytes_size(),
-                             ESP_LOG_INFO);
-    SetTxDebug(true);
-    uart_write_bytes(uart_, reinterpret_cast<const char*>(tx_packets_.front()->raw_bytes()),
-                     tx_packets_.front()->packet_size());
+    std::unique_ptr<Cn105Packet> packet = std::move(tx_packets_.front());
     tx_packets_.pop();
+    SetTxDebug(true);
+    uart_write_bytes(uart_, reinterpret_cast<const char*>(packet->raw_bytes()),
+                     packet->packet_size());
+    LogPacket(name_, PacketDirection::kTx, std::move(packet));
     vTaskDelay(kBusyMs / portTICK_PERIOD_MS);
     SetTxDebug(false);
   }

@@ -2,8 +2,7 @@
 #define EVENT_LOG_H_
 
 #include <stddef.h>
-
-struct mg_connection;
+#include <memory>
 
 namespace hackvac {
 

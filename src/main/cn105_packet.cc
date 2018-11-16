@@ -1,5 +1,7 @@
 #include "cn105_packet.h"
 
+#include <esp_log.h>
+
 namespace hackvac {
 constexpr std::array<uint8_t, 16> Cn105Packet::kBlank16BytePacket;
 
@@ -50,8 +52,48 @@ uint8_t Cn105Packet::CalculateChecksum(const uint8_t* bytes, size_t size) {
   return checksum;
 }
 
+void Cn105Packet::IncrementErrorCount() {
+  last_error_ts = esp_log_timestamp();
+  error_count_++;
+}
+
+void Cn105Packet::IncrementUnexpectedEventCount() {
+  last_error_ts = esp_log_timestamp();
+  unexpected_event_count_++;
+}
+
+void Cn105Packet::AppendByte(uint8_t byte) {
+  last_byte_ts = esp_log_timestamp();
+  if (bytes_read_ == 0) {
+    first_byte_ts = last_byte_ts;
+  }
+
+  bytes_.at(bytes_read_++) = byte;
+}
+
 ////
 //// Packet Factories.
 ////
+
+void LogPacket(const char* tag, PacketDirection dir,
+               std::unique_ptr<Cn105Packet> packet) {
+  // TODO(awong): Shift to using a queue.
+  ESP_LOGI(tag, "%s %d bytes", dir == PacketDirection::kTx ? "tx" : "rx", packet->packet_size());
+  ESP_LOG_BUFFER_HEX_LEVEL(tag, packet->raw_bytes(),
+                           packet->raw_bytes_size(),
+                           ESP_LOG_INFO);
+  // TODO(awong): Print timestamp.
+  if (packet->IsJunk() ||
+      !packet->IsComplete() ||
+      !packet->IsChecksumValid()) {
+    ESP_LOGI(tag, "Bad packet. junk: %d complete %d expected checksum %x actual %x",
+             packet->IsJunk(),
+             packet->IsComplete(),
+             packet->CalculateChecksum(
+                 packet->raw_bytes(), packet->packet_size() - 1),
+             packet->raw_bytes()[packet->packet_size() - 1]);
+    return;
+  }
+}
 
 }  // namespace hackvac

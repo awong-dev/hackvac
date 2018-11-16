@@ -83,26 +83,21 @@ class Cn105Packet {
 
     ~Cn105Packet();
 
-    void IncrementErrorCount() {
-      error_count_++;
-    }
+    ///
+    /// Packet Building functions. Typically used when populating a default
+    /// constructed packet byte-by-byte from an input stream.
+    ///
 
-    void IncrementUnexpectedEventCount() {
-      unexpected_event_count_++;
-    }
+    // Counts UART receive errors. This and IncrementUnexpectedEventCount()
+    // update the last_error_ts.
+    void IncrementErrorCount();
 
-    // Known value constants.
-    static constexpr uint8_t kPacketStartMarker = 0xfc;
+    // Counts unexpected UART events. This and IncrementErrorCount() update
+    // the last_error_ts.
+    void IncrementUnexpectedEventCount();
 
-    // Size constants.
-    static constexpr size_t kHeaderLength = 5;
-    static constexpr size_t kChecksumSize = 1;
-
-    // Packet field constants.
-    static constexpr size_t kStartMarkerPos = 0;
-    static constexpr size_t kTypePos = 1;
-    static constexpr size_t kDataLenPos = 4;
-    static constexpr size_t kDataStartPos = 5;
+    // Appends a byte to the Cn105Packet.
+    void AppendByte(uint8_t byte);
 
     // For use by subclasses.
     // TODO(ajwong): Consider another constructor.
@@ -139,26 +134,42 @@ class Cn105Packet {
     const uint8_t* raw_bytes() const { return bytes_.data(); }
     size_t raw_bytes_size() const { return bytes_read_; }
 
-    uint8_t* cursor() { return &bytes_[bytes_read_]; }
-    void move_cursor(size_t amoumt) { bytes_read_ += amoumt; }
-    void AppendByte(uint8_t byte) {
-      bytes_.at(bytes_read_++) = byte;
-    }
+    // Known value constants.
+    static constexpr uint8_t kPacketStartMarker = 0xfc;
 
+    // Size constants.
+    static constexpr size_t kHeaderLength = 5;
+    static constexpr size_t kChecksumSize = 1;
+
+    // Packet field constants.
+    static constexpr size_t kStartMarkerPos = 0;
+    static constexpr size_t kTypePos = 1;
+    static constexpr size_t kDataLenPos = 4;
+    static constexpr size_t kDataStartPos = 5;
+
+  private:
     // https://github.com/SwiCago/HeatPump assumes 22 byte max for full packet
     // but format-wise, data_len can be 255 so max packet size may be 261.
     // However that would be wasteful in memory usage so rouding up to 30.
     constexpr static size_t kMaxPacketLength = 30;
 
-  private:
     size_t bytes_read_ = 0;
     std::array<uint8_t, kMaxPacketLength> bytes_;
 
     // Number of data-link layer errors.
-    size_t error_count_ = 0;
+    uint16_t error_count_ = 0;
 
     // Number of odd UART errors.
-    size_t unexpected_event_count_ = 0;
+    uint16_t unexpected_event_count_ = 0;
+    
+    // Timestamp of when the first byte was received.
+    uint32_t first_byte_ts = 0;
+
+    // Timestamp of when the most recent byte was received.
+    uint32_t last_byte_ts = 0;
+
+    // Timestamp of when the most recent error was received.
+    uint32_t last_error_ts = 0;
 };
 
 class ConnectAckPacket : public Cn105Packet {
@@ -381,6 +392,9 @@ class InfoAckPacket {
  private:
   Cn105Packet* packet_;
 };
+
+enum class PacketDirection { kTx, kRx };
+void LogPacket(const char* tag, PacketDirection dir, std::unique_ptr<Cn105Packet> packet);
 
 }  // namespace hackvac
 

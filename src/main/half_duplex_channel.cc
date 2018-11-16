@@ -133,8 +133,10 @@ void HalfDuplexChannel::PumpTaskRunloop() {
 void HalfDuplexChannel::DoSendPacket() {
   if (!tx_packets_.empty()) {
     ESP_LOGI(kTag, "Sending: %d bytes", tx_packets_.front()->packet_size());
-    ESP_LOG_BUFFER_HEX_LEVEL(kTag, tx_packets_.front()->raw_bytes(),
-                             tx_packets_.front()->packet_size(), ESP_LOG_INFO);
+    ESP_LOG_BUFFER_HEX_LEVEL(kTag,
+                             tx_packets_.front()->raw_bytes(),
+                             tx_packets_.front()->raw_bytes_size(),
+                             ESP_LOG_INFO);
     SetTxDebug(true);
     uart_write_bytes(uart_, reinterpret_cast<const char*>(tx_packets_.front()->raw_bytes()),
                      tx_packets_.front()->packet_size());
@@ -147,7 +149,6 @@ void HalfDuplexChannel::DoSendPacket() {
 void HalfDuplexChannel::DispatchRxPacket() {
   on_packet_cb_(std::move(current_rx_packet_));
   SetRxDebug(false);
-  vTaskDelay(kBusyMs / portTICK_PERIOD_MS);
 }
 
 void HalfDuplexChannel::ProcessReceiveEvent(uart_event_t event) {
@@ -181,29 +182,39 @@ void HalfDuplexChannel::ProcessReceiveEvent(uart_event_t event) {
   int bytes = uart_read_bytes(uart_, buf, event.size, 0);
   if (bytes != event.size) {
     ESP_LOGE(kTag, "Unable to read all bytes in event from UART");
+    // TODO(awong): Does this really need to crash?
     abort();
   }
 
   // If there is no packet found yet, scan for Cn105Packet::kPacketStartMarker
   // discarding any other bytes until then.
   for (int cursor = 0; cursor < bytes; ++cursor) {
-//    ESP_LOGI(kTag, "r: %x", buf[cursor]);
-    if (!current_rx_packet_) {
-      if (buf[cursor] != Cn105Packet::kPacketStartMarker) {
- //       ESP_LOGI(kTag, "s: %x", buf[cursor]);
-        continue;
+    // If there is no packet or the packet is junk, look for a start marker
+    // and potentially create a new packet.
+    if (!current_rx_packet_ ||
+        (current_rx_packet_->IsJunk() && 
+         buf[cursor] == Cn105Packet::kPacketStartMarker)) {
+      // If there is a packet, then it was junk and that needs to be
+      // dispatched without delay.
+      if (current_rx_packet_) {
+        DispatchRxPacket();
       }
+
       current_rx_packet_ = std::make_unique<Cn105Packet>();
       ESP_LOGI(kTag, "p s: %x %p", buf[cursor], current_rx_packet_.get());
       SetRxDebug(true);
     }
+
+    // Insert byte into the new packet.
     current_rx_packet_->AppendByte(buf[cursor]);
+//    ESP_LOGI(kTag, "r: %x", buf[cursor]);
 
     // On a completed packet, pass off and block for requisite gap
     // between sends.
     if (current_rx_packet_->IsComplete()) {
       ESP_LOGI(kTag, "p d: %p", current_rx_packet_.get());
       DispatchRxPacket();
+      vTaskDelay(kBusyMs / portTICK_PERIOD_MS);
     }
   }
 }

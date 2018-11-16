@@ -83,20 +83,19 @@ void Controller::OnThermostatPacket(
     std::unique_ptr<Cn105Packet> thermostat_packet) {
   ESP_LOGI(kTag, "tstat: %d bytes", thermostat_packet->packet_size());
   ESP_LOG_BUFFER_HEX_LEVEL(kTag, thermostat_packet->raw_bytes(),
-                           thermostat_packet->packet_size(), ESP_LOG_INFO); 
+                           thermostat_packet->raw_bytes_size(), ESP_LOG_INFO);
   if (is_passthru_) {
     hvac_control_.EnqueuePacket(std::move(thermostat_packet));
   } else {
-    // TODO(ajwong): Check for data-link errors.
-
-    if (!thermostat_packet->IsComplete() ||
+    if (thermostat_packet->IsJunk() ||
+        !thermostat_packet->IsComplete() ||
         !thermostat_packet->IsChecksumValid()) {
-      ESP_LOGE(kTag, "Bad packet. complete %d expected checksum %x actual %x",
+      ESP_LOGE(kTag, "Bad packet. junk: %d complete %d expected checksum %x actual %x",
+               thermostat_packet->IsJunk(),
                thermostat_packet->IsComplete(),
                thermostat_packet->CalculateChecksum(
                    thermostat_packet->raw_bytes(), thermostat_packet->packet_size() - 1),
                thermostat_packet->raw_bytes()[thermostat_packet->packet_size() - 1]);
-      // TODO(ajwong): have a log-packet function.
       return;
     }
 

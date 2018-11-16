@@ -112,6 +112,10 @@ class Cn105Packet {
     // packet type and data length can be read.
     bool IsHeaderComplete() const;
 
+    // Returns true if the packet looks like junk. Specifically the start
+    // marker is not kPacketStartMarker.
+    bool IsJunk() const;
+
     // Returns true if current packet is complete.
     bool IsComplete() const;
 
@@ -133,6 +137,7 @@ class Cn105Packet {
 
     size_t packet_size() const { return kHeaderLength + data_size() + kChecksumSize; }
     const uint8_t* raw_bytes() const { return bytes_.data(); }
+    size_t raw_bytes_size() const { return bytes_read_; }
 
     uint8_t* cursor() { return &bytes_[bytes_read_]; }
     void move_cursor(size_t amoumt) { bytes_read_ += amoumt; }

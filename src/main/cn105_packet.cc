@@ -10,7 +10,15 @@ bool Cn105Packet::IsHeaderComplete() const {
   return bytes_read_ >= kHeaderLength;
 }
 
+bool Cn105Packet::IsJunk() const {
+  return (bytes_read_ > 0) && (bytes_[0] != kPacketStartMarker);
+}
+
 size_t Cn105Packet::NextChunkSize() const {
+  if (IsJunk()) {
+    return bytes_.size() - bytes_read_;
+  }
+
   if (!IsHeaderComplete())  {
     return kHeaderLength - bytes_read_;
   }
@@ -18,6 +26,10 @@ size_t Cn105Packet::NextChunkSize() const {
 }
 
 bool Cn105Packet::IsComplete() const {
+  if (IsJunk()) {
+    return bytes_read_ < bytes_.size();
+  }
+
   if (!IsHeaderComplete()) {
     return false;
   }

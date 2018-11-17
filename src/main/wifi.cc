@@ -10,7 +10,7 @@
 #include "esp_wifi.h"
 
 #include "nvs_flash.h"
-#include "nvs_handle.h"
+#include "base/nvs_handle.h"
 
 namespace hackvac {
 namespace {

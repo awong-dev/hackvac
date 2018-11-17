@@ -1,6 +1,6 @@
 #include "boot_state.h"
 
-#include "nvs_handle.h"
+#include "base/nvs_handle.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"

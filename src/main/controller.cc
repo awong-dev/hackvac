@@ -3,6 +3,7 @@
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "event_log.h"
+#include "esp_cxx/ringbuffer.h"
 
 namespace {
 constexpr char kTag[] = "controller";
@@ -20,24 +21,19 @@ constexpr gpio_num_t kTstatRxPin = GPIO_NUM_17;
 
 namespace hackvac {
 
-Controller::SharedData::SharedData()
-  : mux_(portMUX_INITIALIZER_UNLOCKED) {
-}
-
 HvacSettings Controller::SharedData::GetHvacSettings() const {
   HvacSettings settings;
 
-  taskENTER_CRITICAL(&mux_);
+  esp_cxx::AutoMutex lock_(&mutex_);
   settings = hvac_settings_;
-  taskEXIT_CRITICAL(&mux_);
-
   return settings;
 }
 
 void Controller::SharedData::SetHvacSettings(const HvacSettings& hvac_settings) {
-  taskENTER_CRITICAL(&mux_);
-  hvac_settings_ = hvac_settings;
-  taskEXIT_CRITICAL(&mux_);
+  {
+    esp_cxx::AutoMutex lock_(&mutex_);
+    hvac_settings_ = hvac_settings;
+  }
   ESP_LOGI(kTag, "settings: p:%d m:%d, t:%d, f:%d, v:%d, wv:%d",
            static_cast<int32_t>(hvac_settings.power),
            static_cast<int32_t>(hvac_settings.mode),

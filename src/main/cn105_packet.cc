@@ -2,6 +2,8 @@
 
 #include <esp_log.h>
 
+#include "esp_cxx/ringbuffer.h"
+
 namespace hackvac {
 constexpr std::array<uint8_t, 16> Cn105Packet::kBlank16BytePacket;
 
@@ -75,25 +77,44 @@ void Cn105Packet::AppendByte(uint8_t byte) {
 //// Packet Factories.
 ////
 
+static esp_cxx::RingBuffer<std::unique_ptr<Cn105Packet>, 50> g_packet_log_;
+
+static void packet_log_task(void* parameters) {
+  for (;;) {
+    std::unique_ptr<Cn105Packet> packet;
+    if (!g_packet_log_.Get(&packet)) {
+      // TODO(awong): Don't busy loop. How to wait? Notify?
+      taskYIELD();
+      continue;
+    }
+
+    if (packet) {
+//      ESP_LOGI("hi", "%s %d bytes", dir == PacketDirection::kTx ? "tx" : "rx", packet->packet_size());
+      ESP_LOG_BUFFER_HEX_LEVEL("hi", packet->raw_bytes(),
+                               packet->raw_bytes_size(),
+                               ESP_LOG_INFO);
+      // TODO(awong): Print timestamp.
+      if (packet->IsJunk() ||
+          !packet->IsComplete() ||
+          !packet->IsChecksumValid()) {
+        ESP_LOGI("hi", "Bad packet. junk: %d complete %d expected checksum %x actual %x",
+                 packet->IsJunk(),
+                 packet->IsComplete(),
+                 packet->CalculateChecksum(
+                     packet->raw_bytes(), packet->packet_size() - 1),
+                 packet->raw_bytes()[packet->packet_size() - 1]);
+      }
+    }
+  }
+}
+
+void InitPacketLog() {
+  xTaskCreate(&packet_log_task, "packet_log", 4096, NULL, 1, NULL);
+}
+
 void LogPacket(const char* tag, PacketDirection dir,
                std::unique_ptr<Cn105Packet> packet) {
-  // TODO(awong): Shift to using a queue.
-  ESP_LOGI(tag, "%s %d bytes", dir == PacketDirection::kTx ? "tx" : "rx", packet->packet_size());
-  ESP_LOG_BUFFER_HEX_LEVEL(tag, packet->raw_bytes(),
-                           packet->raw_bytes_size(),
-                           ESP_LOG_INFO);
-  // TODO(awong): Print timestamp.
-  if (packet->IsJunk() ||
-      !packet->IsComplete() ||
-      !packet->IsChecksumValid()) {
-    ESP_LOGI(tag, "Bad packet. junk: %d complete %d expected checksum %x actual %x",
-             packet->IsJunk(),
-             packet->IsComplete(),
-             packet->CalculateChecksum(
-                 packet->raw_bytes(), packet->packet_size() - 1),
-             packet->raw_bytes()[packet->packet_size() - 1]);
-    return;
-  }
+  g_packet_log_.Put(std::move(packet));
 }
 
 }  // namespace hackvac

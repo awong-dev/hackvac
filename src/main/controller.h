@@ -3,6 +3,8 @@
 
 #include "half_duplex_channel.h"
 
+#include "esp_cxx/mutex.h"
+
 // This class is designed to control a Mitsubishi CN105 serial control
 // interface. It can either MiTM a signal to log/modify commands, or it
 // can just take over and send its own commands.
@@ -72,12 +74,11 @@ class Controller {
   // Ensures locked access to shared fields.
   class SharedData {
    public:
-    SharedData();
     HvacSettings GetHvacSettings() const;
     void SetHvacSettings(const HvacSettings& hvac_settings);
 
    private:
-    mutable portMUX_TYPE mux_;
+    mutable esp_cxx::Mutex mutex_;
     // Current settings of the HVAC unit.
     HvacSettings hvac_settings_;
   };

@@ -394,6 +394,7 @@ class InfoAckPacket {
 };
 
 enum class PacketDirection { kTx, kRx };
+void InitPacketLog();
 void LogPacket(const char* tag, PacketDirection dir, std::unique_ptr<Cn105Packet> packet);
 
 }  // namespace hackvac

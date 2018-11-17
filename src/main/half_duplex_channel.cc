@@ -18,7 +18,8 @@ HalfDuplexChannel::HalfDuplexChannel(const char *name,
                                      uart_port_t uart,
                                      gpio_num_t tx_pin,
                                      gpio_num_t rx_pin,
-                                     OnPacketCallback callback,
+                                     PacketCallback callback,
+                                     PacketCallback after_send_cb,
                                      gpio_num_t tx_debug_pin,
                                      gpio_num_t rx_debug_pin)
   : name_(name),
@@ -26,6 +27,7 @@ HalfDuplexChannel::HalfDuplexChannel(const char *name,
     tx_pin_(tx_pin),
     rx_pin_(rx_pin),
     on_packet_cb_(callback),
+    after_send_cb_(callback),
     tx_debug_pin_(tx_debug_pin),
     rx_debug_pin_(rx_debug_pin),
     tx_queue_(xQueueCreate(kTxQueueLength, sizeof(Cn105Packet*))) {
@@ -138,7 +140,7 @@ void HalfDuplexChannel::DoSendPacket() {
     SetTxDebug(true);
     uart_write_bytes(uart_, reinterpret_cast<const char*>(packet->raw_bytes()),
                      packet->packet_size());
-    LogPacket(name_, PacketDirection::kTx, std::move(packet));
+    after_send_cb_(std::move(packet));
     vTaskDelay(kBusyMs / portTICK_PERIOD_MS);
     SetTxDebug(false);
   }

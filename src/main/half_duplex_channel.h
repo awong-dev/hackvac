@@ -37,7 +37,7 @@ class HalfDuplexChannel {
 // with a timeout. We can be permissive on the read, but sending must always be 10ms
 // or more than the previous action.
  public:
-  using OnPacketCallback = std::function<void(std::unique_ptr<Cn105Packet>)>;
+  using PacketCallback = std::function<void(std::unique_ptr<Cn105Packet>)>;
 
   // TODO(ajwong): Missing priority.
   //
@@ -47,6 +47,8 @@ class HalfDuplexChannel {
   // |tx_pin| and |rx_pin| specify the gpio pin to use.
   // |callback| is the handler called when a packet is received, or if a byte
   //     stream times out before a full packet is parsed.  
+  // |after_send_cb| is a handler to pass a sent packet to for more processing.
+  //     This can be useful for logging.
   // |tx_debug_pin| and |rx_debug_pin| if switches high during on each packet
   //     sent or receive respectively. This allows an external logic analyzer
   //     to measuring the timing of the channel logic vs when it shows up at
@@ -55,7 +57,8 @@ class HalfDuplexChannel {
                     uart_port_t uart,
                     gpio_num_t tx_pin,
                     gpio_num_t rx_pin,
-                    OnPacketCallback callback,
+                    PacketCallback callback,
+                    PacketCallback after_send_cb = PacketCallback(),
                     gpio_num_t tx_debug_pin = GPIO_NUM_MAX,
                     gpio_num_t rx_debug_pin = GPIO_NUM_MAX);
   ~HalfDuplexChannel();
@@ -115,8 +118,11 @@ class HalfDuplexChannel {
   // Pin for UART RX.
   gpio_num_t rx_pin_ = GPIO_NUM_MAX;
 
-  // Callback to invoke when a packet is completed.
-  OnPacketCallback on_packet_cb_;
+  // Callback to invoke when a packet is received.
+  PacketCallback on_packet_cb_;
+
+  // Callback to invoke when a packet is send.
+  PacketCallback after_send_cb_;
 
   // Pin to hold high when sending a packet.
   gpio_num_t tx_debug_pin_ = GPIO_NUM_MAX;

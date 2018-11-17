@@ -44,6 +44,10 @@ int LogHook(const char* fmt, va_list argp) {
   unsigned int cur_event_num = ++event_num;
 
   int ret_val = g_original_logger(fmt, argp);
+  // TODO(awong): The early-out logic here is unclear. Rethink how this works.
+  if (g_listener_count == 0) {
+    return ret_val;
+  }
 
   // Render this into a string now.
   // 512 is send buffer size.

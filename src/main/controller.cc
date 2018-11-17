@@ -50,7 +50,10 @@ Controller::Controller()
                   }),
     thermostat_("tstat", kTstatUart, kTstatTxPin, kTstatRxPin,
                 [this](std::unique_ptr<Cn105Packet> packet) {
-                  this->OnThermostatPacket(std::move(packet));
+                  OnThermostatPacket(std::move(packet));
+                },
+                [this](std::unique_ptr<Cn105Packet> packet) {
+                  packet_logger_.Log(std::move(packet));
                 },
                 GPIO_NUM_23,
                 GPIO_NUM_22) {

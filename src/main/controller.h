@@ -4,6 +4,7 @@
 #include "half_duplex_channel.h"
 
 #include "esp_cxx/mutex.h"
+#include "esp_cxx/data_logger.h"
 
 // This class is designed to control a Mitsubishi CN105 serial control
 // interface. It can either MiTM a signal to log/modify commands, or it
@@ -71,6 +72,9 @@ class Controller {
   // Channel talking to the thermosat.
   HalfDuplexChannel thermostat_;
 
+  // Asynchronous logger to track protocol interactions.
+  esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacket> packet_logger_{"packets"};
+
   // Ensures locked access to shared fields.
   class SharedData {
    public:
@@ -83,6 +87,7 @@ class Controller {
     HvacSettings hvac_settings_;
   };
 
+  // Hvac state being accessed by multiple tasks.
   SharedData shared_data_;
 };
 

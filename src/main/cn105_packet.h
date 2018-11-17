@@ -83,6 +83,9 @@ class Cn105Packet {
 
     ~Cn105Packet();
 
+    // Prints a packet to the ESP log stream.
+    static void LogPacket(std::unique_ptr<Cn105Packet> packet);
+
     ///
     /// Packet Building functions. Typically used when populating a default
     /// constructed packet byte-by-byte from an input stream.
@@ -392,10 +395,6 @@ class InfoAckPacket {
  private:
   Cn105Packet* packet_;
 };
-
-enum class PacketDirection { kTx, kRx };
-void InitPacketLog();
-void LogPacket(const char* tag, PacketDirection dir, std::unique_ptr<Cn105Packet> packet);
 
 }  // namespace hackvac
 

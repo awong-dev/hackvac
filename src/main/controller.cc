@@ -122,7 +122,7 @@ void Controller::OnThermostatPacket(
       }
     }
 
-    LogPacket("tstat", PacketDirection::kRx, std::move(thermostat_packet));
+    packet_logger_.Log(std::move(thermostat_packet));
   }
 }
 

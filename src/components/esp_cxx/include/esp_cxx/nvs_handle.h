@@ -3,8 +3,9 @@
 
 #include "nvs_flash.h"
 
-namespace hackvac {
+namespace esp_cxx {
 
+// RAII class for opening up an NVS handle.
 class NvsHandle {
   public:
     NvsHandle(const char* name, nvs_open_mode mode);
@@ -24,6 +25,6 @@ class NvsHandle {
     void operator=(NvsHandle&) = delete;
 };
 
-}  // namespace hackvac
+}  // namespace esp_cxx
 
 #endif  // NVS_HANDLE_H_

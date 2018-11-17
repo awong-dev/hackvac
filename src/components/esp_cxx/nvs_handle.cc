@@ -1,8 +1,6 @@
-#include "base/nvs_handle.h"
+#include "esp_cxx/nvs_handle.h"
 
-#include "esp_log.h"
-
-namespace hackvac {
+namespace esp_cxx {
 
 NvsHandle::NvsHandle(const char* name, nvs_open_mode mode) {
   nvs_open(name, mode, &handle_);
@@ -29,4 +27,4 @@ NvsHandle NvsHandle::OpenBootState(nvs_open_mode mode) {
   return NvsHandle("boot_state", mode);
 }
 
-}  // namespace hackvac
+}  // namespace esp_cxx

@@ -1,12 +1,14 @@
 #include "boot_state.h"
 
-#include "base/nvs_handle.h"
+#include "esp_cxx/nvs_handle.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+
+using esp_cxx::NvsHandle;
 
 namespace {
 constexpr char kBootState[] = "boot_state";

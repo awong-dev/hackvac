@@ -56,7 +56,7 @@ class DataLogger {
   TaskHandle_t task_handle_ = nullptr;
 
   // Ring buffer for data to log.
-  esp_cxx::RingBuffer<T, size> data_log_;
+  RingBuffer<T, size> data_log_;
 };
 
 }  // namespace esp_cxx

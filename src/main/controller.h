@@ -73,7 +73,7 @@ class Controller {
   HalfDuplexChannel thermostat_;
 
   // Asynchronous logger to track protocol interactions.
-  esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacket> packet_logger_{"packets"};
+  esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacketThunk> packet_logger_{"packets"};
 
   // Ensures locked access to shared fields.
   class SharedData {

@@ -84,7 +84,10 @@ class Cn105Packet {
     ~Cn105Packet();
 
     // Prints a packet to the ESP log stream.
-    static void LogPacket(std::unique_ptr<Cn105Packet> packet);
+    void DebugLog();
+
+    // Simple thunk to call DebugLog() on the given packet.
+    static void LogPacketThunk(std::unique_ptr<Cn105Packet> packet);
 
     ///
     /// Packet Building functions. Typically used when populating a default

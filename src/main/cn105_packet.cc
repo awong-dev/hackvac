@@ -73,23 +73,25 @@ void Cn105Packet::AppendByte(uint8_t byte) {
   bytes_.at(bytes_read_++) = byte;
 }
 
-void Cn105Packet::LogPacket(std::unique_ptr<Cn105Packet> packet) {
+void Cn105Packet::LogPacketThunk(std::unique_ptr<Cn105Packet> packet) {
   if (packet) {
-    //      ESP_LOGI("hi", "%s %d bytes", dir == PacketDirection::kTx ? "tx" : "rx", packet->packet_size());
-    ESP_LOG_BUFFER_HEX_LEVEL("hi", packet->raw_bytes(),
-                             packet->raw_bytes_size(),
-                             ESP_LOG_INFO);
-    // TODO(awong): Print timestamp.
-    if (packet->IsJunk() ||
-        !packet->IsComplete() ||
-        !packet->IsChecksumValid()) {
-      ESP_LOGI("hi", "Bad packet. junk: %d complete %d expected checksum %x actual %x",
-               packet->IsJunk(),
-               packet->IsComplete(),
-               packet->CalculateChecksum(
-                   packet->raw_bytes(), packet->packet_size() - 1),
-               packet->raw_bytes()[packet->packet_size() - 1]);
-    }
+    packet->DebugLog();
+  }
+}
+
+void Cn105Packet::DebugLog() {
+  //      ESP_LOGI("hi", "%s %d bytes", dir == PacketDirection::kTx ? "tx" : "rx", packet->packet_size());
+  ESP_LOG_BUFFER_HEX_LEVEL("hi", raw_bytes(), raw_bytes_size(), ESP_LOG_INFO);
+  // TODO(awong): Print timestamp.
+  if (IsJunk() ||
+      !IsComplete() ||
+      !IsChecksumValid()) {
+    ESP_LOGI("hi", "Bad packet. junk: %d complete %d expected checksum %x actual %x",
+             IsJunk(),
+             IsComplete(),
+             CalculateChecksum(
+                 raw_bytes(), packet_size() - 1),
+             raw_bytes()[packet_size() - 1]);
   }
 }
 

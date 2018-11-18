@@ -8,6 +8,7 @@
 #define HTML_LEN(name) (&name##_end[0] - &name##_start[0] - 1)
 #define HTML_CONTENTS(name) (&name##_start[0])
 
+// TODO(awong): Take this as a string_view.
 HTML_DECL(resp404_html);
 HTML_DECL(index_html);
 
@@ -31,6 +32,14 @@ void HttpServer::Start() {
 
   // TODO(awong): Figure out the priority.
   xTaskCreate(&HttpServer::EventPumpThunk, name_, XT_STACK_EXTRA_CLIB, this, 2, &pump_task_);
+}
+
+void HttpServer::AddEndpoint(const char* path_pattern,
+                             void (*handler)(mg_connection*, int event, void* ev_data),
+                             void* user_data) {
+  mg_http_endpoint_opts opts = {};
+  opts.user_data = user_data;
+  mg_register_http_endpoint_opt(connection_, path_pattern, handler, opts);
 }
 
 void HttpServer::EventPumpThunk(void* parameters) {

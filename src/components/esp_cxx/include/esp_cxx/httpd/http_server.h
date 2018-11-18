@@ -5,6 +5,8 @@
 
 namespace esp_cxx {
 
+class HttpEndpoint;
+
 class HttpServer {
  public:
   HttpServer(const char* name, const char* port);
@@ -12,6 +14,17 @@ class HttpServer {
 
   // Starts the server.
   void Start();
+
+  // Adds a handler for the given path_pattern. For a simple stateless
+  // endpoint, |hander| may just be a static function with |user_data|
+  // set to null.
+  //
+  // More commonly, |handler| with be a static method thunk that will
+  // cast |user_data| to the right object type bridging the mongoose
+  // C api back into C++.
+  void AddEndpoint(const char* path_pattern,
+                   void (*handler)(mg_connection*, int event, void* ev_data),
+                   void* user_data);
 
  private:
   // Thunk for executing the actual run loop.

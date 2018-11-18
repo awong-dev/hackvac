@@ -454,7 +454,7 @@ void HandleBroadcast(mg_connection* nc, int ev, void* ev_data) {
 
 }  // namespace
 
-void HttpdTask(void *pvParameters) {
+void HttpdTask(void *parameters) {
   ESP_LOGI(kTag, "Binding port 80");
   mg_mgr_init(&g_mgr, NULL); // TODO(awong): Move this into its own init.
   mg_connection *c = mg_bind(&g_mgr, ":80", &MongooseEventHandler);

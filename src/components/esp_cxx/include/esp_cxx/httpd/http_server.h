@@ -2,16 +2,8 @@
 #define ESPCXX_HTTPD_HTTP_SERVER_H_
 
 #include "mongoose.h"
-#include <experimental/string_view>
-
-enum class HttpMethod {
-  kGet,
-  kPost,
-};
 
 namespace esp_cxx {
-
-class HttpEndpoint;
 
 class HttpServer {
  public:

@@ -1,7 +1,13 @@
-#ifndef ESPCXX_HTTP_HTTP_SERVER_H_
-#define ESPCXX_HTTP_HTTP_SERVER_H_
+#ifndef ESPCXX_HTTPD_HTTP_SERVER_H_
+#define ESPCXX_HTTPD_HTTP_SERVER_H_
 
 #include "mongoose.h"
+#include <experimental/string_view>
+
+enum class HttpMethod {
+  kGet,
+  kPost,
+};
 
 namespace esp_cxx {
 
@@ -25,6 +31,9 @@ class HttpServer {
   void AddEndpoint(const char* path_pattern,
                    void (*handler)(mg_connection*, int event, void* ev_data),
                    void* user_data);
+
+  void AddPathHandler(const char* path_pattern,
+                      void (*handler)(mg_connection*, int event, http_message* message));
 
  private:
   // Thunk for executing the actual run loop.
@@ -57,4 +66,4 @@ class HttpServer {
 
 }  // namespace esp_cxx
 
-#endif  // ESPCXX_HTTP_HTTP_SERVER_H_
+#endif  // ESPCXX_HTTPD_HTTP_SERVER_H_

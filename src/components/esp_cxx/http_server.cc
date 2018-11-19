@@ -19,17 +19,18 @@ namespace esp_cxx {
 HttpServer::HttpServer(const char* name, const char* port)
   : name_(name),
     port_(port) {
+  mg_mgr_init(&event_manager_, this);
+  connection_ = mg_bind(&event_manager_, port_, &DefaultHandlerThunk);
 }
 
 HttpServer::~HttpServer() {
+  if (pump_task_) {
+    vTaskDelete(pump_task_);
+  }
   mg_mgr_free(&event_manager_);
-  vTaskDelete(pump_task_);
 }
 
 void HttpServer::Start() {
-  mg_mgr_init(&event_manager_, this);
-  connection_ = mg_bind(&event_manager_, port_, &DefaultHandlerThunk);
-
   // TODO(awong): Figure out the priority.
   xTaskCreate(&HttpServer::EventPumpThunk, name_, XT_STACK_EXTRA_CLIB, this, 2, &pump_task_);
 }

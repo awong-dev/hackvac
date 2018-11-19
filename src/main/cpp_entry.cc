@@ -19,6 +19,9 @@
 
 #include "driver/gpio.h"
 
+#include "esp_cxx/httpd/http_server.h"
+#include "esp_cxx/httpd/wifi_config_endpoint.h"
+
 static const char *TAG = "hackvac";
 
 void blink_task(void* parameters) {
@@ -109,7 +112,9 @@ void cpp_entry() {
   controller.Init();
 
   // Run webserver.
-  xTaskCreate(&HttpdTask, "httpd", XT_STACK_EXTRA_CLIB + 8192, NULL, 2, NULL);
+  esp_cxx::HttpServer http_server("httpd", ":80");
+  http_server.Start();
+//  xTaskCreate(&HttpdTask, "httpd", XT_STACK_EXTRA_CLIB + 8192, NULL, 2, NULL);
 
   // TODO(awong): Add idle task hook ot sleep. Use hte ESP32-IDF hooks and don't create a task directly.
 }

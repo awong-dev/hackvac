@@ -16,16 +16,16 @@ class HttpServer {
   // Starts the server.
   void Start();
 
-  // Adds a handler for the given path_pattern. For a simple stateless
-  // endpoint, |hander| may just be a static function with |user_data|
-  // set to null.
+  // Adds a handler for the given path_pattern.
   //
-  // More commonly, |handler| with be a static method thunk that will
-  // cast |user_data| to the right object type bridging the mongoose
-  // C api back into C++.
+  // Mongoose is really annoying in that it doesn't allow userdata per
+  // endpoint without invasively changing its API. Any state needed should
+  // be either added to the HttpServer as a context.
+  //
+  // TODO(awong): Add some sort of type-based user-context to the HttpServer
+  // as a way to hack inheritance.
   void AddEndpoint(const char* path_pattern,
-                   void (*handler)(mg_connection*, int event, void* ev_data),
-                   void* user_data);
+                   void (*handler)(mg_connection*, int event, void* ev_data));
 
   typedef void (*EndPointCallback)(const HttpRequest& request, HttpResponse response);
 

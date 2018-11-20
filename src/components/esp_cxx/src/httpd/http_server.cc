@@ -40,11 +40,8 @@ void HttpServer::Start() {
 }
 
 void HttpServer::AddEndpoint(const char* path_pattern,
-                             void (*handler)(mg_connection*, int event, void* ev_data),
-                             void* user_data) {
-  mg_http_endpoint_opts opts = {};
-  opts.user_data = user_data;
-  mg_register_http_endpoint_opt(connection_, path_pattern, handler, opts);
+                             void (*handler)(mg_connection*, int event, void* ev_data)) {
+  mg_register_http_endpoint(connection_, path_pattern, handler);
 }
 
 void HttpServer::CxxHandlerWrapper(mg_connection* new_connection, int event, void* ev_data,

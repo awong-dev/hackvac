@@ -45,9 +45,12 @@ void HttpServer::AddEndpoint(const char* path_pattern,
 }
 
 void HttpServer::CxxHandlerWrapper(mg_connection* new_connection, int event, void* ev_data,
-                       EndPointCallback callback) {
-  HttpRequest request(static_cast<http_message*>(ev_data));
-  callback(request, HttpResponse(new_connection));
+                                   EndPointCallback callback) {
+  if (event == MG_EV_HTTP_REQUEST) {
+    HttpRequest request(static_cast<http_message*>(ev_data));
+    callback(request, HttpResponse(new_connection));
+  }
+  // TODO(awong): How to handle multipart to the same endpoint?
 }
 
 void HttpServer::EventPumpThunk(void* parameters) {

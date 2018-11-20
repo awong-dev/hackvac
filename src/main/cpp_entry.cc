@@ -19,6 +19,7 @@
 #include "driver/gpio.h"
 
 #include "esp_cxx/httpd/http_server.h"
+#include "esp_cxx/httpd/ota_endpoint.h"
 #include "esp_cxx/httpd/wifi_config_endpoint.h"
 #include "esp_cxx/wifi.h"
 
@@ -99,6 +100,7 @@ void cpp_entry() {
   firmware_watchdog();
 
   // Setup Wifi access.
+  // TODO(awong): move all this into a wifi object.
   wifi_config_t wifi_config;
   static constexpr char kFallbackSsid[] = "hackvac_setup";
   static constexpr char kFallbackPassword[] = "cn105rulez";
@@ -114,6 +116,7 @@ void cpp_entry() {
   // Run webserver.
   esp_cxx::HttpServer http_server("httpd", ":80");
   http_server.RegisterEndpoint<&esp_cxx::WifiConfigEndpoint>("/api/wificonfig$");
+  http_server.RegisterEndpoint<&esp_cxx::OtaEndpoint>("/api/ota$");
   http_server.Start();
 
   // TODO(awong): Add idle task hook ot sleep. Use hte ESP32-IDF hooks and don't create a task directly.

@@ -1,14 +1,14 @@
-#ifndef WIFI_H_
-#define WIFI_H_
+#ifndef ESPCXX_WIFI_H_
+#define ESPCXX_WIFI_H_
 
 #include "esp_wifi.h"
 
+namespace esp_cxx {
+
 #define fldsiz(name, field) (sizeof(((name *)0)->field))
-
-namespace hackvac {
-
 constexpr size_t kSsidBytes = fldsiz(wifi_config_t, sta.ssid);
 constexpr size_t kPasswordBytes = fldsiz(wifi_config_t, sta.password);
+#undef fldsize
 
 bool LoadConfigFromNvs(
     const char fallback_ssid[], size_t fallback_ssid_len,
@@ -23,6 +23,6 @@ void SetWifiPassword(const char* password);
 
 void WifiConnect(const wifi_config_t& wifi_config, bool is_station);
 
-}  // namespace hackvac
+}  // namespace esp_cxx
 
-#endif  // WIFI_H_
+#endif  // ESPCXX_WIFI_H_

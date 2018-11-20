@@ -5,7 +5,6 @@
 #include "controller.h"
 #include "event_log.h"
 #include "httpd.h"
-#include "wifi.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -21,6 +20,7 @@
 
 #include "esp_cxx/httpd/http_server.h"
 #include "esp_cxx/httpd/wifi_config_endpoint.h"
+#include "esp_cxx/wifi.h"
 
 static const char *TAG = "hackvac";
 
@@ -102,10 +102,10 @@ void cpp_entry() {
   wifi_config_t wifi_config;
   static constexpr char kFallbackSsid[] = "hackvac_setup";
   static constexpr char kFallbackPassword[] = "cn105rulez";
-  bool is_staion = LoadConfigFromNvs(kFallbackSsid, sizeof(kFallbackSsid),
-                                     kFallbackPassword, sizeof(kFallbackPassword),
-                                     &wifi_config);
-  WifiConnect(wifi_config, is_staion);
+  bool is_staion = esp_cxx::LoadConfigFromNvs(kFallbackSsid, sizeof(kFallbackSsid),
+                                              kFallbackPassword, sizeof(kFallbackPassword),
+                                              &wifi_config);
+  esp_cxx::WifiConnect(wifi_config, is_staion);
 
   // Initialize hackvac controller.
   static hackvac::Controller controller;

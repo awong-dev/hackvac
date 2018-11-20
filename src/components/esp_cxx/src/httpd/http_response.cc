@@ -1,10 +1,23 @@
 #include "esp_cxx/httpd/http_response.h"
 
+#include "esp_cxx/logging.h"
+
 #include "mongoose.h"
 #include "esp_log.h"
 
-// TODO(ajwong): Move this somewhere common.
-static constexpr char kTag[] = "esp_cxx";
+/*
+void SendResultJson(mg_connection* nc, int status, const char* msg) {
+  size_t len = strlen(msg);
+  static constexpr mg_str kSuccessJsonStart = MG_MK_STR("{ 'result': '");
+  static constexpr mg_str kSuccessJsonEnd = MG_MK_STR("' }");
+
+  mg_send_head(nc, status, kSuccessJsonStart.len + len + kSuccessJsonEnd.len,
+               "Content-Type: application/json");
+  mg_send(nc, kSuccessJsonStart.p, kSuccessJsonStart.len);
+  mg_send(nc, msg, len);
+  mg_send(nc, kSuccessJsonEnd.p, kSuccessJsonEnd.len);
+}
+*/
 
 namespace esp_cxx {
 
@@ -35,7 +48,7 @@ HttpResponse& HttpResponse::operator=(HttpResponse&& other) {
 void HttpResponse::SendHead(int status_code, int64_t content_length,
               const char* extra_headers) {
   if (state_ != State::kNew) {
-    ESP_LOGW(kTag, "SendHead() executed out of kNew state");
+    ESP_LOGW(kEspCxxTag, "SendHead() executed out of kNew state");
     return;
   }
 
@@ -46,7 +59,7 @@ void HttpResponse::SendHead(int status_code, int64_t content_length,
 void HttpResponse::SendError(int status_code,
                              std::experimental::string_view text) {
   if (state_ != State::kNew) {
-    ESP_LOGW(kTag, "SendError() executed out of kNew state");
+    ESP_LOGW(kEspCxxTag, "SendError() executed out of kNew state");
     return;
   }
 
@@ -58,7 +71,7 @@ void HttpResponse::SendError(int status_code,
 
 void HttpResponse::Send(std::experimental::string_view data) {
   if (state_ != State::kStarted) {
-    ESP_LOGW(kTag, "Send() out of kStarted");
+    ESP_LOGW(kEspCxxTag, "Send() out of kStarted");
     return;
   }
 

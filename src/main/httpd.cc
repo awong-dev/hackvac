@@ -8,7 +8,6 @@
 #include "jsmn.h"
 #include "mbedtls/md5.h"
 #include "mongoose.h"
-#include "wifi.h"
 
 #include <ctype.h>
 
@@ -57,25 +56,6 @@ bool hex_digit(const char input[], unsigned char *val) {
   return true;
 }
 
-void SendResultJson(mg_connection* nc, int status, const char* msg) {
-  size_t len = strlen(msg);
-  static constexpr mg_str kSuccessJsonStart = MG_MK_STR("{ 'result': '");
-  static constexpr mg_str kSuccessJsonEnd = MG_MK_STR("' }");
-
-  mg_send_head(nc, status, kSuccessJsonStart.len + len + kSuccessJsonEnd.len,
-               "Content-Type: application/json");
-  mg_send(nc, kSuccessJsonStart.p, kSuccessJsonStart.len);
-  mg_send(nc, msg, len);
-  mg_send(nc, kSuccessJsonEnd.p, kSuccessJsonEnd.len);
-}
-
-mg_str TokenToMgStr(mg_str data, const jsmntok_t& token) {
-  mg_str str;
-  str.p = data.p + token.start;
-  str.len = token.end - token.start;
-  return str;
-}
-
 void MongooseEventHandler(struct mg_connection *nc,
 					 int event,
 					 void *eventData) {
@@ -111,135 +91,6 @@ void HandleIndex(mg_connection *nc, int event, void *ev_data) {
 
   mg_send_head(nc, 200, HTML_LEN(index_html), "Content-Type: text/html");
   mg_send(nc, HTML_CONTENTS(index_html), HTML_LEN(index_html));
-  nc->flags |= MG_F_SEND_AND_CLOSE;
-}
-
-void HandleWifiConfig(mg_connection *nc, int event, void *ev_data) {
-  ESP_LOGI(kTag, "Write wifi config");
-  http_message* hm = static_cast<http_message*>(ev_data);
-
-  struct WifiConfig {
-    // Returns nullptr on success. Otherwise is error message.
-    static const char* HandlePost(mg_str data) {
-      // { 'ssid': 'blah', 'password', 'blee' }
-      // Total of 5 tokens. Object, and 4 strings.
-      static constexpr unsigned int kMaxTokens = 5;
-      jsmntok_t tokens[kMaxTokens];
-      jsmn_parser json_parser;
-      jsmn_init(&json_parser);
-      int num_tokens = jsmn_parse(&json_parser, data.p, data.len, &tokens[0],
-                                  kMaxTokens);
-      if (num_tokens < 0) {
-        return "Invalid JSON";
-      }
-      ESP_LOGI(kTag, "Num tokens found %d", num_tokens);
-      ESP_LOGI(kTag, "Received %.*s", data.len, data.p);
-
-      static constexpr char kExpectedJson[] =
-        "Expected format: { \"ssid\": \"abc\", \"password\": \"123\" }. Use double-quotes!";
-      if (tokens[0].type != JSMN_OBJECT ||
-          tokens[0].size != 2) {
-        ESP_LOGI(kTag, "Expected object with 2 children. Got type %d children %d",
-                 tokens[0].type, tokens[0].size);
-        return kExpectedJson;
-      }
-
-      // All other tokens should be strings and be structured as pairs.
-      //
-      // JSMN treats 'string' as a JSMN_PRIMITIVE and a "string" as a
-      // JSMN_STRING (wtf?). The size field is the number of children
-      // so the first should be 1 and the second should be zero.
-      for (int i = 0; i < tokens[0].size; i++) {
-        int field_start = 1 + 2*i;
-        if (tokens[field_start].type != JSMN_STRING ||
-            tokens[field_start].size != 1 ||
-            tokens[field_start + 1].type != JSMN_STRING ||
-            tokens[field_start + 1].size != 0) {
-          ESP_LOGW(kTag, "Error at field %d", i);
-          return kExpectedJson;
-        }
-      }
-
-      if (!HandleEntry(data, tokens[1], tokens[2])) {
-        return "Unable ot process first field";
-      }
-      if (!HandleEntry(data, tokens[3], tokens[4])) {
-        return "Unable ot process second field";
-      }
-      return nullptr;
-    }
-
-    static bool HandleEntry(mg_str data, jsmntok_t field_token,
-                            jsmntok_t value_token) {
-      static constexpr mg_str kSsidKey = MG_MK_STR("ssid");
-      mg_str field = TokenToMgStr(data, field_token);
-      if (mg_strcmp(field, kSsidKey) == 0) {
-        mg_str value = TokenToMgStr(data, value_token);
-        char ssid[kSsidBytes];
-        if (value.len > sizeof(ssid) - 1) {
-          return false;
-        }
-        memcpy(ssid, value.p, value.len);
-        ssid[value.len] = '\0';
-        SetWifiSsid(ssid);
-      }
-
-      static constexpr mg_str kPasswordKey = MG_MK_STR("password");
-      if (mg_strcmp(field, kPasswordKey) == 0) {
-        mg_str value = TokenToMgStr(data, value_token);
-        char password[kPasswordBytes];
-        if (value.len > sizeof(password) - 1) {
-          return false;
-        }
-        memcpy(password, value.p, value.len);
-        password[value.len] = '\0';
-        SetWifiPassword(password);
-      }
-
-      return true;
-    }
-  };
-
-  if (mg_vcmp(&hm->method, "GET") == 0) {
-    static constexpr mg_str kConfigStart = MG_MK_STR("{ 'ssid': '");
-    static constexpr mg_str kConfigMid = MG_MK_STR("', 'password': '");
-    static constexpr mg_str kConfigEnd = MG_MK_STR("' }");
-    char ssid[kSsidBytes];
-    size_t ssid_len = sizeof(ssid);
-    char password[kPasswordBytes];
-    size_t password_len = sizeof(password);
-    if (!GetWifiSsid(&ssid[0], &ssid_len)) {
-      constexpr char kNotSet[] = "(not set)";
-      strcpy(ssid, kNotSet);
-      ssid_len = strlen(kNotSet);
-    } else {
-      ssid_len--;  // null terminator.
-    }
-    if (!GetWifiPassword(&password[0], &password_len)) {
-      constexpr char kNotSet[] = "(not set)";
-      strcpy(password, kNotSet);
-      password_len = strlen(kNotSet);
-    } else {
-      password_len--;  // null terminator.
-    }
-    mg_send_head(nc, 200,
-                 kConfigStart.len + ssid_len + kConfigMid.len +
-                     password_len + kConfigEnd.len,
-                 "Content-Type: application/json");
-    mg_send(nc, kConfigStart.p, kConfigStart.len);
-    mg_send(nc, ssid, ssid_len);
-    mg_send(nc, kConfigMid.p, kConfigMid.len);
-    mg_send(nc, password, password_len);
-    mg_send(nc, kConfigEnd.p, kConfigEnd.len);
-  } else if (mg_vcmp(&hm->method, "POST") == 0) {
-    const char* error = WifiConfig::HandlePost(hm->body);
-    if (error == nullptr) {
-      SendResultJson(nc, 200, "");
-    } else {
-      SendResultJson(nc, 400, error);
-    }
-  }
-
   nc->flags |= MG_F_SEND_AND_CLOSE;
 }
 
@@ -466,7 +317,6 @@ void HttpdTask(void *parameters) {
   mg_register_http_endpoint(c, "/api/events$", &HandleEventsStream);
   mg_register_http_endpoint(c, "/api/firmware$", &HandleFirmware);
   mg_register_http_endpoint(c, "/api/restart$", &HandleRestart);
-  mg_register_http_endpoint(c, "/api/wificonfig$", &HandleWifiConfig);
 
   while(1) {
     mg_mgr_poll(&g_mgr, 10000);

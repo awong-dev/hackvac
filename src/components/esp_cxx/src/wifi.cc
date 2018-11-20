@@ -1,4 +1,4 @@
-#include "wifi.h"
+#include "esp_cxx/wifi.h"
 
 #include <string.h>
 
@@ -12,16 +12,15 @@
 #include "nvs_flash.h"
 #include "esp_cxx/nvs_handle.h"
 
-using esp_cxx::NvsHandle;
-
-namespace hackvac {
+namespace esp_cxx {
 namespace {
 
 constexpr char kTag[] = "hackvac:wifi";
-constexpr char kSsidKey[] = "ssid";
-constexpr char kPasswordKey[] = "password";
+constexpr char kSsidNvsKey[] = "ssid";
+constexpr char kPasswordNvsKey[] = "password";
 
 /* FreeRTOS event group to signal when we are connected*/
+// TODO(awong): Why are we bothering with this signal? Can't an atomic be used?
 EventGroupHandle_t g_wifi_event_group;
 
 /* The event group allows multiple bits for each event,
@@ -123,12 +122,12 @@ void WifiConnect(const wifi_config_t& wifi_config, bool is_station) {
 bool GetWifiSsid(char* ssid, size_t* len) {
   NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
   size_t stored_len;
-  esp_err_t err = nvs_get_str(nvs_wifi_config.get(), kSsidKey, nullptr, &stored_len);
+  esp_err_t err = nvs_get_str(nvs_wifi_config.get(), kSsidNvsKey, nullptr, &stored_len);
   if (err == ESP_OK) {
     if (stored_len > *len) {
       return false;
     }
-    ESP_ERROR_CHECK(nvs_get_str(nvs_wifi_config.get(), kSsidKey, ssid, len));
+    ESP_ERROR_CHECK(nvs_get_str(nvs_wifi_config.get(), kSsidNvsKey, ssid, len));
   } else if (err == ESP_ERR_NVS_NOT_FOUND ||
              err == ESP_ERR_NVS_INVALID_HANDLE) {
     // ESP_ERR_NVS_INVALID_HANDLE occurs if namespace has never been written.
@@ -142,12 +141,12 @@ bool GetWifiSsid(char* ssid, size_t* len) {
 bool GetWifiPassword(char* password, size_t* len) {
   NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
   size_t stored_len;
-  esp_err_t err = nvs_get_str(nvs_wifi_config.get(), kPasswordKey, nullptr, &stored_len);
+  esp_err_t err = nvs_get_str(nvs_wifi_config.get(), kPasswordNvsKey, nullptr, &stored_len);
   if (err == ESP_OK) {
     if (stored_len > *len) {
       return false;
     }
-    ESP_ERROR_CHECK(nvs_get_str(nvs_wifi_config.get(), kPasswordKey, password, len));
+    ESP_ERROR_CHECK(nvs_get_str(nvs_wifi_config.get(), kPasswordNvsKey, password, len));
   } else if (err == ESP_ERR_NVS_NOT_FOUND ||
              err == ESP_ERR_NVS_INVALID_HANDLE) {
     // ESP_ERR_NVS_INVALID_HANDLE occurs if namespace has never been written.
@@ -166,7 +165,7 @@ void SetWifiSsid(const char* ssid) {
   trimmed_ssid[sizeof(trimmed_ssid) - 1] = '\0';
 
   ESP_LOGD(kTag, "Writing ssid: %s", trimmed_ssid);
-  ESP_ERROR_CHECK(nvs_set_str(nvs_wifi_config.get(), kSsidKey, trimmed_ssid));
+  ESP_ERROR_CHECK(nvs_set_str(nvs_wifi_config.get(), kSsidNvsKey, trimmed_ssid));
 }
 
 void SetWifiPassword(const char* password) {
@@ -177,7 +176,7 @@ void SetWifiPassword(const char* password) {
   trimmed_password[sizeof(trimmed_password) - 1] = '\0';
 
   ESP_LOGD(kTag, "Writing password: %s", trimmed_password);
-  ESP_ERROR_CHECK(nvs_set_str(nvs_wifi_config.get(), kPasswordKey, trimmed_password));
+  ESP_ERROR_CHECK(nvs_set_str(nvs_wifi_config.get(), kPasswordNvsKey, trimmed_password));
 }
 
-}  // namespace hackvac
+}  // namespace esp_cxx

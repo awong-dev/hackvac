@@ -4,14 +4,12 @@
 #include "esp_cxx/logging.h"
 #include "esp_cxx/httpd/http_request.h"
 #include "esp_cxx/httpd/http_response.h"
+#include "esp_cxx/wifi.h"
 
 #include "esp_log.h"
 #include "jsmn.h"
 #include "mongoose.h"
 
-// TODO(awong): THIS IS INCORRECT. Migrate wifi over first.
-static constexpr size_t kSsidBytes = 16;
-static constexpr size_t kPasswordBytes = 16;
 static constexpr const char kContentTypeJson[] = "Content-Type: application/json";
 
 namespace esp_cxx {
@@ -25,7 +23,6 @@ void SendWifiConfig(HttpResponse response) {
   size_t ssid_len = sizeof(ssid);
   char password[kPasswordBytes];
   size_t password_len = sizeof(password);
-  /*
   if (!GetWifiSsid(&ssid[0], &ssid_len)) {
     constexpr char kNotSet[] = "(not set)";
     strcpy(ssid, kNotSet);
@@ -40,7 +37,8 @@ void SendWifiConfig(HttpResponse response) {
   } else {
     password_len--;  // null terminator.
   }
-  */
+
+  // TODO(awong): Move to a json response handler.
   response.SendHead(200,
                     kConfigStart.size() + ssid_len + kConfigMid.size() +
                     password_len + kConfigEnd.size(),
@@ -65,26 +63,24 @@ bool HandleUpdateEntry(std::string_view data, jsmntok_t field_token,
 
   if (kSsidKey == field) {
     std::string_view value = TokenToStringView(data, value_token);
-//    char ssid[kSsidBytes];
+    // TODO(awong): Rewrite this logic to be less ugly.
+    char ssid[kSsidBytes];
     if (value.size() > kSsidBytes - 1) {
       return false;
     }
-    /*
-    memcpy(ssid, value.p, value.len);
-    ssid[value.len] = '\0';
+    memcpy(ssid, value.data(), value.size());
+    ssid[value.size()] = '\0';
     SetWifiSsid(ssid);
-    */
   } else if (kPasswordKey == field) {
     std::string_view value = TokenToStringView(data, value_token);
-//    char password[kPasswordBytes];
+    // TODO(awong): Rewrite this logic to be less ugly.
+    char password[kPasswordBytes];
     if (value.size() > kPasswordBytes - 1) {
       return false;
     }
-    /*
-    memcpy(password, value.p, value.len);
-    password[value.len] = '\0';
+    memcpy(password, value.data(), value.size());
+    password[value.size()] = '\0';
     SetWifiPassword(password);
-    */
   }
 
   return true;

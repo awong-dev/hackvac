@@ -53,10 +53,10 @@ void UpdateWifiConfig(const char* body, HttpResponse response) {
 }
 }  // namespace
 
-void WifiConfigEndpoint(const HttpRequest* request, HttpResponse response) {
-  if (request->method() == HttpMethod::kGet) {
+void WifiConfigEndpoint(const HttpRequest& request, HttpResponse response) {
+  if (request.method() == HttpMethod::kGet) {
     SendWifiConfig(std::move(response));
-  } else if (request->method() == HttpMethod::kPost) {
+  } else if (request.method() == HttpMethod::kPost) {
     // TODO(awong): This needs the post body.
     UpdateWifiConfig("", std::move(response));
   } else {

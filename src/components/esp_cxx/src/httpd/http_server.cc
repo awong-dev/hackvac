@@ -16,6 +16,10 @@ HTML_DECL(index_html);
 constexpr char kTag[] = "http";
 
 namespace esp_cxx {
+
+namespace {
+}  // namespace
+
 HttpServer::HttpServer(const char* name, const char* port)
   : name_(name),
     port_(port) {
@@ -41,6 +45,12 @@ void HttpServer::AddEndpoint(const char* path_pattern,
   mg_http_endpoint_opts opts = {};
   opts.user_data = user_data;
   mg_register_http_endpoint_opt(connection_, path_pattern, handler, opts);
+}
+
+void HttpServer::CxxHandlerWrapper(mg_connection* new_connection, int event, void* ev_data,
+                       EndPointCallback callback) {
+  HttpRequest request(static_cast<http_message*>(ev_data));
+  callback(request, HttpResponse(new_connection));
 }
 
 void HttpServer::EventPumpThunk(void* parameters) {

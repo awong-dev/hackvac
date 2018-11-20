@@ -113,6 +113,7 @@ void cpp_entry() {
 
   // Run webserver.
   esp_cxx::HttpServer http_server("httpd", ":80");
+//  http_server.RegisterEndpoint("/api/wificonfig", &esp_cxx::WifiConfigEndpoint);
   http_server.Start();
 //  xTaskCreate(&HttpdTask, "httpd", XT_STACK_EXTRA_CLIB + 8192, NULL, 2, NULL);
 

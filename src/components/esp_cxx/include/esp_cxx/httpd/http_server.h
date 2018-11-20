@@ -3,6 +3,9 @@
 
 #include "mongoose.h"
 
+#include "esp_cxx/httpd/http_request.h"
+#include "esp_cxx/httpd/http_response.h"
+
 namespace esp_cxx {
 
 class HttpServer {
@@ -24,12 +27,24 @@ class HttpServer {
                    void (*handler)(mg_connection*, int event, void* ev_data),
                    void* user_data);
 
-  void AddPathHandler(const char* path_pattern,
-                      void (*handler)(mg_connection*, int event, http_message* message));
+  typedef void (*EndPointCallback)(const HttpRequest& request, HttpResponse response);
+
+  template <EndPointCallback handler>
+  void RegisterEndpoint(const char* path_pattern) {
+    AddEndpoint(path_pattern, &CxxHandlerAdaptor<handler>);
+  }
 
  private:
   // Thunk for executing the actual run loop.
   static void EventPumpThunk(void* parameters);
+
+  template <EndPointCallback handler>
+  static void CxxHandlerAdaptor(mg_connection* new_connection, int event, void* ev_data) {
+    CxxHandlerWrapper(new_connection, event, ev_data, handler);
+  }
+
+  static void CxxHandlerWrapper(mg_connection* new_connection, int event, void* ev_data,
+                                EndPointCallback callback);
 
   // Pumps events for the http server.
   void EventPumpRunLoop();

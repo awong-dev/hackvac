@@ -16,8 +16,37 @@ class HttpServer {
   class Endpoint {
    public:
     virtual ~Endpoint() = default;
+
+    // A plain HTTP request has arrived.
     virtual void OnHttp(const HttpRequest& request, bool is_multipart, HttpResponse response) {}
+    
+    // TODO(awong): Support chunked http.
+
+    // Multipart lifecycle events.
+    // OnMultipartStart - client has requested a multipart upload.
+    // OnMultipart - a segment of data from the multipart stream is available.
+    //               The filename and varname are available for all related
+    //               pieces of a chunk.
+    virtual void OnMultipartStart(const HttpRequest& request, HttpResponse response) {}
     virtual void OnMultipart(HttpMultipart* multipart, HttpResponse response) {}
+
+    // Websocket lifecycle events.
+    // OnWebsocketHandshake - client has requested a websocket connection.
+    // OnWebsocketHandshakeComplete - client has completed handshake.
+    // OnWebsocketFrame - websocket frame is received from client. Only called between
+    //                    OnWebsocketHandshakeComplete() and OnWebsocketClosed().
+    // OnWebsocketClosed - websocket connection closed. Always called once
+    //                     after OnWebsocketHandshake().
+    virtual void OnWebsocketHandshake(const HttpRequest& request, HttpResponse response) {}
+    virtual void OnWebsocketHandshakeComplete(HttpResponse response) {}
+    virtual void OnWebsocketFrame(WebsocketFrame frame, WebsocketSender sender) {}
+    virtual void OnWebsocketClosed() {}
+    // MG_EV_WEBSOCKET_HANDSHAKE_REQUEST = ev_data = html_message.
+    // MG_EV_WEBSOCKET_HANDSHAKE_DONE = null ev_data.
+    // MG_EV_WEBSOCKET_FRAME = websocket_message
+    // MG_EV_WEBSOCKET_CONTROL_FRAME = websocket_message
+    // MG_EV_CLOSE = null ev_data
+//    virtual void OnWebsocket(HttpMultipart* multipart, HttpResponse response) {}
 
     static void OnHttpEventThunk(mg_connection *nc, int event,
                                  void *ev_data, void *user_data);
@@ -29,23 +58,14 @@ class HttpServer {
   // Adds an Endpoint handler for the given path_pattern.
   void RegisterEndpoint(const char* path_pattern, Endpoint* endpoint);
 
-  // Useful for disabling parts of the endpoint handlers.
-  static void IgnoreHttp(const HttpResponse&, HttpResponse) {}
-  static void IgnoreMultipart(HttpMultipart*, HttpResponse) {}
-
-  // Conveience wrapper for adding endpoint handlers using a bare function.
+  // Conveience wrapper for adding simple http endpoint handler using a bare function.
   typedef void (*HttpCallback)(const HttpRequest& request, bool is_multipart, HttpResponse response);
-  typedef void (*HttpMultipartCallback)(HttpMultipart* multipart, HttpResponse response);
-  // TODO(awong): Create a do-nothing handler instead of using nullptr.
-  template <HttpCallback handler, HttpMultipartCallback multipart_cb = &IgnoreMultipart>
+  template <HttpCallback handler>
   void RegisterEndpoint(const char* path_pattern) {
     static struct : Endpoint {
       void OnHttp(const HttpRequest& request, bool is_multipart, HttpResponse response) {
         // TODO(awong): rename handler to be consistent with multipart_cb here and elsewhere.
         return handler(request, is_multipart, std::move(response));
-      }
-      void OnMultipart(HttpMultipart* multipart, HttpResponse response) {
-        return multipart_cb(multipart, std::move(response));
       }
     } endpoint;
     RegisterEndpoint(path_pattern, &endpoint);

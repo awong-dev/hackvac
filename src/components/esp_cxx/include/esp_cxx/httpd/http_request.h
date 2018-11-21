@@ -23,7 +23,7 @@ enum class HttpMethod {
 
 class HttpRequest {
  public:
-  explicit HttpRequest(http_message* raw_message);
+  explicit HttpRequest(http_message* raw_frame);
 
   std::string_view body() const { return ToStringView(raw_message_->body); }
   HttpMethod method() const { return method_; }
@@ -75,6 +75,42 @@ class HttpMultipart {
  private:
   mg_http_multipart_part *raw_multipart_;
   State state_;
+};
+
+// Based directly on the RFC Websocket protocol.
+// https://tools.ietf.org/html/rfc6455#page-65
+enum class WebsocketOpcode : uint8_t {
+  kContinue = 0x0,
+  kText = 1,
+  kBinary = 2,
+  kClose = 8,
+  kPing = 9,
+  kPong = 10,
+};
+
+class WebsocketFrame {
+ public:
+  explicit WebsocketFrame(websocket_message* raw_frame)
+    : raw_frame_(raw_frame) {
+  }
+
+  WebsocketOpcode opcode() const { return static_cast<WebsocketOpcode>(raw_frame_->flags & 0xf); }
+  std::string_view data() const { return {reinterpret_cast<char*>(raw_frame_->data), raw_frame_->size}; }
+
+ private:
+  websocket_message* raw_frame_;
+};
+
+class WebsocketSender {
+ public:
+  explicit WebsocketSender(mg_connection *connection)
+    : connection_(connection) {
+  }
+
+  void Send(WebsocketOpcode opcode, std::string_view data);
+
+ private:
+  mg_connection* connection_;
 };
 
 }  // namespace esp_cxx

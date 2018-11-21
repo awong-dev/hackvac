@@ -3,7 +3,6 @@
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "event_log.h"
-#include "esp_cxx/ringbuffer.h"
 
 namespace {
 constexpr char kTag[] = "controller";

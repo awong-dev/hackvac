@@ -2,8 +2,6 @@
 
 #include <esp_log.h>
 
-#include "esp_cxx/ringbuffer.h"
-
 namespace hackvac {
 constexpr std::array<uint8_t, 16> Cn105Packet::kBlank16BytePacket;
 

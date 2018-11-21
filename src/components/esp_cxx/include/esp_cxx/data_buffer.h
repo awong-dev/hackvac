@@ -1,5 +1,5 @@
-#ifndef ESPCXX_RINGBUFFER_H_
-#define ESPCXX_RINGBUFFER_H_
+#ifndef ESPCXX_DATA_BUFFER_H_
+#define ESPCXX_DATA_BUFFER_H_
 
 #include <atomic>
 
@@ -11,11 +11,15 @@ namespace esp_cxx {
 // two tasks. Particularly useful for passing around std::unique_ptr<> as
 // discarded elements will be returned back to the caller as temporary which
 // can then trigger normal RAII clean-up.
+//
+// This has different semantics from the ESP-IDF FreeRTOS RingBuffer
+// implemenation. In particular, it expects only one data type and
+// inserting is actually an exchange operation.
 template <typename T, size_t size>
-class RingBuffer {
+class DataBuffer {
  public:
   uint32_t dropped_elements() const { return dropped_elements_; }
-  // Adds |obj| into the RingBuffer. If this overwrites 
+  // Adds |obj| into the DataBuffer. If this overwrites 
   T Put(T&& obj) {
     AutoMutex lock(&mutex_);
 
@@ -70,5 +74,5 @@ class RingBuffer {
 
 }  // namespace esp_cxx
 
-#endif  // ESPCXX_RINGBUFFER_H_
+#endif  // ESPCXX_DATA_BUFFER_H_
 

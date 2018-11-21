@@ -5,7 +5,7 @@
 #include "freertos/task.h"
 #include "esp_task.h"
 
-#include "esp_cxx/ringbuffer.h"
+#include "esp_cxx/data_buffer.h"
 
 namespace esp_cxx {
 
@@ -56,7 +56,7 @@ class DataLogger {
   TaskHandle_t task_handle_ = nullptr;
 
   // Ring buffer for data to log.
-  RingBuffer<T, size> data_log_;
+  DataBuffer<T, size> data_log_;
 };
 
 }  // namespace esp_cxx

@@ -13,6 +13,17 @@ class HttpServer {
   HttpServer(const char* name, const char* port);
   ~HttpServer();
 
+  class Endpoint {
+   public:
+    virtual ~Endpoint() = default;
+    virtual void OnHttp(const HttpRequest& request, HttpResponse response) {}
+    virtual void OnMultipart(HttpMultipart* multipart, HttpResponse response) {}
+
+    static void OnHttpEventThunk(mg_connection *nc, int event,
+                                 void *ev_data, void *user_data);
+  };
+
+
   // Starts the server.
   void Start();
 
@@ -25,27 +36,32 @@ class HttpServer {
   // TODO(awong): Add some sort of type-based user-context to the HttpServer
   // as a way to hack inheritance.
   void AddEndpoint(const char* path_pattern,
-                   void (*handler)(mg_connection*, int event, void* ev_data));
+                   void (*handler)(mg_connection*, int event, void* ev_data, void *user_data));
+  void AddEndpoint(const char* path_pattern, Endpoint* endpoint);
 
-  typedef void (*EndPointCallback)(const HttpRequest& request, HttpResponse response);
-  typedef void (*MultipartCallback)(HttpMultipart* multipart, HttpResponse response);
+  typedef void (*HttpCallback)(const HttpRequest& request, HttpResponse response);
+  typedef void (*HttpMultipartCallback)(HttpMultipart* multipart, HttpResponse response);
 
-  template <EndPointCallback handler, MultipartCallback multipart_cb = nullptr>
+  template <HttpCallback handler, HttpMultipartCallback multipart_cb = nullptr>
   void RegisterEndpoint(const char* path_pattern) {
     AddEndpoint(path_pattern, &CxxHandlerAdaptor<handler, multipart_cb>);
+  }
+
+  void RegisterEndpoint(const char* path_pattern, Endpoint* endpoint) {
+    AddEndpoint(path_pattern, endpoint);
   }
 
  private:
   // Thunk for executing the actual run loop.
   static void EventPumpThunk(void* parameters);
 
-  template <EndPointCallback handler, MultipartCallback multipart_cb>
-  static void CxxHandlerAdaptor(mg_connection* new_connection, int event, void* ev_data) {
+  template <HttpCallback handler, HttpMultipartCallback multipart_cb>
+  static void CxxHandlerAdaptor(mg_connection* new_connection, int event, void* ev_data, void* user_data) {
     CxxHandlerWrapper(new_connection, event, ev_data, handler, multipart_cb);
   }
 
   static void CxxHandlerWrapper(mg_connection* new_connection, int event, void* ev_data,
-                                EndPointCallback callback, MultipartCallback multipart_cb);
+                                HttpCallback callback, HttpMultipartCallback multipart_cb);
 
   // Pumps events for the http server.
   void EventPumpRunLoop();
@@ -54,7 +70,8 @@ class HttpServer {
   // intercepts first.
   static void DefaultHandlerThunk(struct mg_connection *nc,
                                   int event,
-                                  void *eventData);
+                                  void *event_data,
+                                  void *user_data);
 
   // Name for pump task.
   const char* name_;

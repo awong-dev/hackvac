@@ -34,7 +34,8 @@ mg_mgr g_mgr;
 
 void MongooseEventHandler(struct mg_connection *nc,
 					 int event,
-					 void *eventData) {
+					 void *eventData,
+                          void *user_data) {
 //  ESP_LOGI(kTag, "Event %d", event);
   if (event == MG_EV_HTTP_REQUEST) {
     http_message* message = static_cast<http_message*>(eventData);
@@ -44,7 +45,7 @@ void MongooseEventHandler(struct mg_connection *nc,
   }
 }
 
-void HandleLedOn(mg_connection* nc, int event, void *ev_data) {
+void HandleLedOn(mg_connection* nc, int event, void *ev_data, void* user_data) {
   ESP_LOGI(kTag, "Light on");
   gpio_set_level(BLINK_GPIO, 1);
 
@@ -53,7 +54,7 @@ void HandleLedOn(mg_connection* nc, int event, void *ev_data) {
   nc->flags |= MG_F_SEND_AND_CLOSE;
 }
 
-void HandleLedOff(mg_connection *nc, int event, void *ev_data) {
+void HandleLedOff(mg_connection *nc, int event, void *ev_data, void* user_data) {
   ESP_LOGI(kTag, "Light off");
   gpio_set_level(BLINK_GPIO, 0);
 
@@ -62,7 +63,7 @@ void HandleLedOff(mg_connection *nc, int event, void *ev_data) {
   nc->flags |= MG_F_SEND_AND_CLOSE;
 }
 
-void HandleIndex(mg_connection *nc, int event, void *ev_data) {
+void HandleIndex(mg_connection *nc, int event, void *ev_data, void *user_data) {
   ESP_LOGI(kTag, "Index");
 
   mg_send_head(nc, 200, HTML_LEN(index_html), "Content-Type: text/html");
@@ -70,13 +71,13 @@ void HandleIndex(mg_connection *nc, int event, void *ev_data) {
   nc->flags |= MG_F_SEND_AND_CLOSE;
 }
 
-void HandleRestart(mg_connection *nc, int event, void *ev_data) {
+void HandleRestart(mg_connection *nc, int event, void *ev_data, void* user_data) {
   esp_restart();
 }
 
 // TODO(awong): Timeout net connections? Otherwise the server can be jammed.
 //  Look at mg_set_timer.
-void HandleEventsStream(mg_connection *nc, int event, void *ev_data) {
+void HandleEventsStream(mg_connection *nc, int event, void *ev_data, void* user_data) {
 //  ESP_LOGI(kTag, "Requesting event stream %d", event);
   static constexpr char kEventHello[] = "{ 'data': 'Hello' }";
   switch (event) {
@@ -116,7 +117,7 @@ void HandleEventsStream(mg_connection *nc, int event, void *ev_data) {
   }
 }
 
-void HandleBroadcast(mg_connection* nc, int ev, void* ev_data) {
+void HandleBroadcast(mg_connection* nc, int ev, void* ev_data, void* user_data) {
   if (!(nc->flags & RECEIVES_EVENT_LOG)) {
     return;
   }
@@ -137,14 +138,14 @@ void HandleBroadcast(mg_connection* nc, int ev, void* ev_data) {
 void HttpdTask(void *parameters) {
   ESP_LOGI(kTag, "Binding port 80");
   mg_mgr_init(&g_mgr, NULL); // TODO(awong): Move this into its own init.
-  mg_connection *c = mg_bind(&g_mgr, ":80", &MongooseEventHandler);
+  mg_connection *c = mg_bind(&g_mgr, ":80", &MongooseEventHandler, nullptr);
 
   mg_set_protocol_http_websocket(c);
-  mg_register_http_endpoint(c, "/$", &HandleIndex);
-  mg_register_http_endpoint(c, "/led_on$", &HandleLedOn);
-  mg_register_http_endpoint(c, "/led_off$", &HandleLedOff);
-  mg_register_http_endpoint(c, "/api/events$", &HandleEventsStream);
-  mg_register_http_endpoint(c, "/api/restart$", &HandleRestart);
+  mg_register_http_endpoint(c, "/$", &HandleIndex, nullptr);
+  mg_register_http_endpoint(c, "/led_on$", &HandleLedOn, nullptr);
+  mg_register_http_endpoint(c, "/led_off$", &HandleLedOff, nullptr);
+  mg_register_http_endpoint(c, "/api/events$", &HandleEventsStream, nullptr);
+  mg_register_http_endpoint(c, "/api/restart$", &HandleRestart, nullptr);
 
   while(1) {
     mg_mgr_poll(&g_mgr, 10000);

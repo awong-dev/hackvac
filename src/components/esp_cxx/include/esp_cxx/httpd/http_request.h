@@ -63,8 +63,8 @@ class HttpMultipart {
 
   State state() const { return state_;}
 
-  const char* filename() const { return raw_multipart_->file_name; }
-  const char* var_name() const { return raw_multipart_->var_name; }
+  std::string_view filename() const { return {raw_multipart_->file_name}; }
+  std::string_view var_name() const { return {raw_multipart_->var_name}; }
   std::string_view data() const { return ToStringView(raw_multipart_->data); }
   int status() const { return raw_multipart_->status; }
   void* user_data() { return raw_multipart_->user_data; }

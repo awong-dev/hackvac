@@ -23,8 +23,8 @@ NvsHandle NvsHandle::OpenWifiConfig(nvs_open_mode mode) {
   return NvsHandle("wifi_config", mode);
 }
 
-NvsHandle NvsHandle::OpenBootState(nvs_open_mode mode) {
-  return NvsHandle("boot_state", mode);
+NvsHandle NvsHandle::OpenOtaState(nvs_open_mode mode) {
+  return NvsHandle("ota_state", mode);
 }
 
 }  // namespace esp_cxx

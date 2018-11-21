@@ -1,6 +1,5 @@
 #include "cpp_entry.h"
 
-#include "boot_state.h"
 #include "constants.h"
 #include "controller.h"
 #include "event_log.h"
@@ -21,6 +20,7 @@
 #include "esp_cxx/httpd/http_server.h"
 #include "esp_cxx/httpd/ota_endpoint.h"
 #include "esp_cxx/httpd/wifi_config_endpoint.h"
+#include "esp_cxx/ota.h"
 #include "esp_cxx/wifi.h"
 
 static const char *TAG = "hackvac";
@@ -97,7 +97,7 @@ void cpp_entry() {
   // Silly debug tasks.
   xTaskCreate(&blink_task, "blink_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
   xTaskCreate(&uptime_task, "uptime_task", 4096, NULL, 1, NULL);
-  firmware_watchdog();
+  esp_cxx::RunOtaWatchdog();
 
   // Setup Wifi access.
   // TODO(awong): move all this into a wifi object.
@@ -116,7 +116,8 @@ void cpp_entry() {
   // Run webserver.
   esp_cxx::HttpServer http_server("httpd", ":80");
   http_server.RegisterEndpoint<&esp_cxx::WifiConfigEndpoint>("/api/wificonfig$");
-  http_server.RegisterEndpoint<&esp_cxx::OtaEndpoint>("/api/ota$");
+  esp_cxx::OtaEndpoint ota_endpoint;
+  http_server.RegisterEndpoint("/api/ota$", &ota_endpoint);
   http_server.Start();
 
   // TODO(awong): Add idle task hook ot sleep. Use hte ESP32-IDF hooks and don't create a task directly.

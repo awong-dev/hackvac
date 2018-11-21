@@ -16,7 +16,7 @@ class HttpServer {
   class Endpoint {
    public:
     virtual ~Endpoint() = default;
-    virtual void OnHttp(const HttpRequest& request, HttpResponse response) {}
+    virtual void OnHttp(const HttpRequest& request, bool is_multipart, HttpResponse response) {}
     virtual void OnMultipart(HttpMultipart* multipart, HttpResponse response) {}
 
     static void OnHttpEventThunk(mg_connection *nc, int event,

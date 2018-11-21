@@ -1,10 +1,23 @@
 #include "esp_cxx/httpd/ota_endpoint.h"
 
+#include "esp_cxx/logging.h"
+
+#include "esp_log.h"
+
 namespace esp_cxx {
 
-void OtaEndpoint(const HttpRequest& request, HttpResponse response) {
-#if 0
-bool hex_digit(const char input[], unsigned char *val) {
+namespace {
+char to_hex(char nibble) {
+  static constexpr char hex[16] = {
+    '0', '1', '2', '3',
+    '4', '5', '6', '7',
+    '8', '9', 'a', 'b',
+    'c', 'd', 'e', 'f'
+  };
+  return hex[nibble & 0xf];
+}
+
+bool hex_digit(std::string_view input, unsigned char *val) {
   if (isdigit(input[0])) {
     *val = input[0] - '0';
   } else if ('a' <= input[0] && input[0] <= 'f') {
@@ -28,153 +41,96 @@ bool hex_digit(const char input[], unsigned char *val) {
   return true;
 }
 
-void HandleFirmware(mg_connection *nc, int event, void *ev_data) {
-  ESP_LOGD(kTag, "Got firwamware update");
-  bool is_response_sent = false;
+}  // namespace
 
-  struct OtaContext {
-    OtaContext() : has_expected_md5(false), update_partition(nullptr), out_handle(-1) {
-      mbedtls_md5_init(&md5_ctx);
-      memset(&actual_md5[0], 0xcd, sizeof(actual_md5));
-      memset(&expected_md5[0], 0x34, sizeof(expected_md5));
-    }
+void OtaEndpoint::OnHttp(const HttpRequest& request, bool is_multipart, HttpResponse response) {
+  if (!is_multipart) {
+    response.SendError(400, "Expecting Multipart");
+    return;
+  }
+  if (in_progress) {
+    response.SendError(400, "Another OTA in progress");
+    return;
+  }
+  in_progress = true;
+}
 
-    unsigned char expected_md5[16];
-    bool has_expected_md5;
-    unsigned char actual_md5[16];
-    mbedtls_md5_context md5_ctx;
-    const esp_partition_t* update_partition;
-    esp_ota_handle_t out_handle;
-  };
-
-  switch (event) {
-    case MG_EV_HTTP_MULTIPART_REQUEST: {
-      ESP_LOGI(kTag, "firmware upload starting");
-      nc->user_data = new OtaContext();
-      break;
-    }
-    case MG_EV_HTTP_PART_BEGIN: {
-      OtaContext* context =
-        static_cast<OtaContext*>(nc->user_data);
-      if (!context) return;
-
-      mg_http_multipart_part* multipart =
-        static_cast<mg_http_multipart_part*>(ev_data);
-      ESP_LOGI(kTag, "Starting multipart: %s", multipart->var_name);
-      if (strcmp("firmware", multipart->var_name) == 0) {
-        mbedtls_md5_starts(&context->md5_ctx);
-        context->update_partition = esp_ota_get_next_update_partition(NULL);
-        ESP_ERROR_CHECK(esp_ota_begin(context->update_partition,
-                                      OTA_SIZE_UNKNOWN, &context->out_handle));
+void OtaEndpoint::OnMultipart(HttpMultipart* multipart, HttpResponse response) {
+  assert(in_progress);
+  switch (multipart->state()) {
+    case HttpMultipart::State::kBegin: {
+      ESP_LOGI(kEspCxxTag, "Firmware upload: %s", multipart->var_name().data());
+      if (multipart->var_name() == "firmware") {
+        // TODO(awong): Maybe pass in content length?
+        ota_writer_ = std::make_unique<OtaWriter>();
       }
       break;
     }
-    case MG_EV_HTTP_PART_DATA: {
-      OtaContext* context =
-        static_cast<OtaContext*>(nc->user_data);
-      if (!context) return;
 
-      mg_http_multipart_part* multipart =
-        static_cast<mg_http_multipart_part*>(ev_data);
-
-      if (strcmp("md5", multipart->var_name) == 0 &&
-          multipart->data.len != 0) {
+    case HttpMultipart::State::kData: {
+      if (multipart->var_name() == "md5") {
         static constexpr char kExpectsMd5[] =
-          "Expecting md5 field to be 32-digit hex string";
+            "Expecting md5 field to be 32-digit hex string";
         // Reading the md5 checksum. Data should be 32 hex digits.
-        if (multipart->data.len != 32) {
-          is_response_sent = true;
-          mg_send_head(nc, 400, strlen(kExpectsMd5),
-                       "Content-Type: text/plain");
-          mg_send(nc, kExpectsMd5, strlen(kExpectsMd5));
-          goto abort_request;
+        if (multipart->data().size() != 32) {
+          response.SendError(400, kExpectsMd5);
+          return;
         }
-
-        ESP_LOGI(kTag, "Read md5");
-        context->has_expected_md5 = true;
-        for (int i = 0; i < sizeof(context->expected_md5); i++) {
-          if (!hex_digit(multipart->data.p + i*2, &context->expected_md5[i])) {
-            is_response_sent = true;
-            mg_send_head(nc, 400, strlen(kExpectsMd5),
-                         "Content-Type: text/plain");
-            mg_send(nc, kExpectsMd5, strlen(kExpectsMd5));
-            goto abort_request;
+        ESP_LOGI(kEspCxxTag, "Read md5");
+        has_expected_md5_ = true;
+        for (int i = 0; i < expected_md5_.size(); i++) {
+          if (!hex_digit(multipart->data().substr(i*2, 2), &expected_md5_[i])) {
+            response.SendError(400, kExpectsMd5);
+            // TODO(awong): On error... how do we reset the in_progress?
+            return;
           }
         }
-      } else if (strcmp("firmware", multipart->var_name) == 0) {
-          // This is the firmware blob. Write it! And hash it.
-          mbedtls_md5_update(&context->md5_ctx,
-                             reinterpret_cast<const unsigned char*>(
-                                 multipart->data.p),
-                             multipart->data.len); 
-          ESP_ERROR_CHECK(esp_ota_write(context->out_handle,
-                                        multipart->data.p,
-                                        multipart->data.len));
+      } else if (multipart->var_name() == "firmware") {
+        // This is the firmware blob. Write it!
+        ota_writer_->Write(multipart->data());
       }
       break;
     }
-    case MG_EV_HTTP_PART_END: {
-      OtaContext* context = static_cast<OtaContext*>(nc->user_data);
-      if (!context) return;
-      mg_http_multipart_part* multipart =
-          static_cast<mg_http_multipart_part*>(ev_data);
-      ESP_LOGI(kTag, "Ending multipart: %s", multipart->var_name);
-      if (strcmp("firmware", multipart->var_name) == 0) {
-        mbedtls_md5_finish(&context->md5_ctx, &context->actual_md5[0]);
-        mbedtls_md5_free(&context->md5_ctx);
-      }
-      break;
-    }
-    case MG_EV_HTTP_MULTIPART_REQUEST_END: {
-      ESP_LOGI(kTag, "Flashing done");
-      OtaContext* context = static_cast<OtaContext*>(nc->user_data);
-      if (!context) return;
 
+    case HttpMultipart::State::kEnd: {
+      ESP_LOGI(kEspCxxTag, "Ending multipart: %s", multipart->var_name().data());
+      if ("firmware" == multipart->var_name()) {
+        ota_writer_->Finish();
+      }
+      break;
+    }
+
+    default:
+    case HttpMultipart::State::kRequestEnd:
+      in_progress = false;
+      // TODO(awong): Send an error.
+      ESP_LOGI(kEspCxxTag, "Flashing done");
       int status = 400;
-      if (context->has_expected_md5 &&
-          memcmp(&context->actual_md5[0], &context->expected_md5[0],
-                 sizeof(context->actual_md5)) == 0) {
+      auto& actual_md5 = ota_writer_->md5();
+      if (has_expected_md5_ &&
+          actual_md5 == expected_md5_) {
         status = 200;
         
-        ESP_LOGI(kTag, "Setting new OTA to boot.");
-        ESP_ERROR_CHECK(esp_ota_end(context->out_handle));
-        ESP_ERROR_CHECK(esp_ota_set_boot_partition(context->update_partition));
+        ESP_LOGI(kEspCxxTag, "Setting new OTA to boot.");
+        ota_writer_->SetBootPartition();
 
         // TODO(awong): This should call a shutdown hook.
-        SetBootState(BootState::FRESH);
-        ESP_LOGI(kTag, "Firmware flashed!");
+        ESP_LOGI(kEspCxxTag, "Firmware flashed!");
       }
       // Yay! All good!
-      static constexpr char kFirmwareSuccess[] = "uploaded firmware md5: ";
-      mg_send_head(nc, status, strlen(kFirmwareSuccess) + 32,
-                   "Content-Type: text/plain");
-      mg_send(nc, kFirmwareSuccess, strlen(kFirmwareSuccess));
-      for (int i = 0; i < sizeof(context->actual_md5); ++i) {
-        mg_printf(nc, "%02x", context->actual_md5[i]);
+      static const std::string_view kFirmwareResponse("uploaded firmware md5: ");
+      static constexpr char kContentTypePlain[] = "Content-Type: text/plain";
+      char md5[32];
+      response.Send(status, kFirmwareResponse.size() + sizeof(md5),
+                   kContentTypePlain, kFirmwareResponse);
+      for (int i = 0; i < actual_md5.size(); ++i) {
+        uint8_t byte = actual_md5[i];
+        md5[i*2] = to_hex(byte);
+        md5[i*2 + 1] = to_hex(byte >> 4);
       }
-      is_response_sent = true;
-      break;
-    }
-    default:
-      static constexpr char kExpectsFileUpload[] =
-        "Expecting http multi-part file upload";
-      mg_send_head(nc, 400, strlen(kExpectsFileUpload),
-                   "Content-Type: text/plain");
-      mg_send(nc, kExpectsFileUpload, strlen(kExpectsFileUpload));
-      is_response_sent = true;
-      break;
+      response.SendMore({md5, sizeof(md5)});
+      ota_writer_.reset();
   }
-abort_request:
-
-  if (is_response_sent) {
-    ESP_LOGD(kTag, "Response sent. Cleaning up.");
-    OtaContext* context = static_cast<OtaContext*>(nc->user_data);
-    delete context;
-    nc->user_data = nullptr;
-    nc->flags |= MG_F_SEND_AND_CLOSE;
-  }
-}
-#endif
 }
 
 }  // namespace esp_cxx

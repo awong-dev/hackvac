@@ -14,7 +14,7 @@ class NvsHandle {
     NvsHandle(NvsHandle&& other);
     NvsHandle& operator=(NvsHandle&&);
     static NvsHandle OpenWifiConfig(nvs_open_mode mode);
-    static NvsHandle OpenBootState(nvs_open_mode mode);
+    static NvsHandle OpenOtaState(nvs_open_mode mode);
 
     nvs_handle get() const { return handle_; }
 

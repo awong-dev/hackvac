@@ -1,7 +1,7 @@
 #ifndef ESPCXX_HTTPD_HTTP_RESPONSE_H_
 #define ESPCXX_HTTPD_HTTP_RESPONSE_H_
 
-#include <experimental/string_view>
+#include "esp_cxx/cxx17hack.h"
 
 struct mg_connection;
 
@@ -15,10 +15,10 @@ class HttpResponse {
   HttpResponse(HttpResponse&& other);
   HttpResponse& operator=(HttpResponse&& other);
 
-  void SendHead(int status_code, int64_t content_length,
-                const char* extra_headers);
-  void SendError(int status_code, std::experimental::string_view text);
-  void Send(std::experimental::string_view data);
+  void Send(int status_code, int64_t content_length,
+            const char* extra_headers, std::string_view body);
+  void SendMore(std::string_view data);
+  void SendError(int status_code, const char* text);
 
   mg_connection* connection() { return connection_; }
 

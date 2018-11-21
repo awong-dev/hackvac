@@ -25,9 +25,6 @@ HttpResponse::HttpResponse(mg_connection* connection)
    : connection_(connection) {}
 
 HttpResponse::~HttpResponse() {
-  if (connection_) {
-    connection_->flags |= MG_F_SEND_AND_CLOSE;
-  }
 }
 
 HttpResponse::HttpResponse(HttpResponse&& other)
@@ -45,31 +42,32 @@ HttpResponse& HttpResponse::operator=(HttpResponse&& other) {
   return *this;
 }
 
-void HttpResponse::SendHead(int status_code, int64_t content_length,
-              const char* extra_headers) {
+void HttpResponse::Send(int status_code, int64_t content_length,
+                        const char* extra_headers, std::string_view body) {
   if (state_ != State::kNew) {
     ESP_LOGW(kEspCxxTag, "SendHead() executed out of kNew state");
     return;
   }
+  state_ = State::kStarted;
 
-  mg_send_head(connection_, status_code, content_length,
-               extra_headers);
+  mg_send_head(connection_, status_code, content_length, extra_headers);
+  SendMore(body);
 }
 
-void HttpResponse::SendError(int status_code,
-                             std::experimental::string_view text) {
+void HttpResponse::SendError(int status_code, const char* text) {
   if (state_ != State::kNew) {
     ESP_LOGW(kEspCxxTag, "SendError() executed out of kNew state");
     return;
   }
 
-  // TODO(awong): THIS IS AN API VIOLATION. data() is not necessary
-  // NULL terminated.
-  mg_http_send_error(connection_, status_code, text.data());
+  mg_http_send_error(connection_, status_code, text);
   state_ = State::kClosed;
 }
 
-void HttpResponse::Send(std::experimental::string_view data) {
+void HttpResponse::SendMore(std::experimental::string_view data) {
+  if (data.empty()) {
+    return;
+  }
   if (state_ != State::kStarted) {
     ESP_LOGW(kEspCxxTag, "Send() out of kStarted");
     return;

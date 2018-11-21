@@ -39,15 +39,14 @@ void SendWifiConfig(HttpResponse response) {
   }
 
   // TODO(awong): Move to a json response handler.
-  response.SendHead(200,
+  response.Send(200,
                     kConfigStart.size() + ssid_len + kConfigMid.size() +
                     password_len + kConfigEnd.size(),
-                    kContentTypeJson);
-  response.Send(kConfigStart);
-  response.Send({ssid, ssid_len});
-  response.Send(kConfigMid);
-  response.Send({password, password_len});
-  response.Send(kConfigEnd);
+                    kContentTypeJson, kConfigStart);
+  response.SendMore({ssid, ssid_len});
+  response.SendMore(kConfigMid);
+  response.SendMore({password, password_len});
+  response.SendMore(kConfigEnd);
 }
 
 std::string_view TokenToStringView(std::string_view data,

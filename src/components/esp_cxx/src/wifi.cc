@@ -2,20 +2,20 @@
 
 #include <string.h>
 
+#include "esp_cxx/logging.h"
+#include "esp_cxx/nvs_handle.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 
 #include "esp_event_loop.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
-
 #include "nvs_flash.h"
-#include "esp_cxx/nvs_handle.h"
 
 namespace esp_cxx {
 namespace {
 
-constexpr char kTag[] = "hackvac:wifi";
 constexpr char kSsidNvsKey[] = "ssid";
 constexpr char kPasswordNvsKey[] = "password";
 
@@ -31,26 +31,26 @@ constexpr int WIFI_CONNECTED_BIT = BIT0;
 esp_err_t EspEventHandler(void *ctx, system_event_t *event) {
     switch(event->event_id) {
     case SYSTEM_EVENT_STA_START:
-        ESP_LOGI(kTag, "STA_START.");
+        ESP_LOGI(kEspCxxTag, "STA_START.");
         esp_wifi_connect();
         break;
     case SYSTEM_EVENT_STA_GOT_IP:
-        ESP_LOGI(kTag, "got ip:%s",
+        ESP_LOGI(kEspCxxTag, "got ip:%s",
                  ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
         xEventGroupSetBits(g_wifi_event_group, WIFI_CONNECTED_BIT);
         break;
     case SYSTEM_EVENT_AP_STACONNECTED:
-        ESP_LOGI(kTag, "station:" MACSTR " join, AID=%d",
+        ESP_LOGI(kEspCxxTag, "station:" MACSTR " join, AID=%d",
                  MAC2STR(event->event_info.sta_connected.mac),
                  event->event_info.sta_connected.aid);
         break;
     case SYSTEM_EVENT_AP_STADISCONNECTED:
-        ESP_LOGI(kTag, "station:" MACSTR "leave, AID=%d",
+        ESP_LOGI(kEspCxxTag, "station:" MACSTR "leave, AID=%d",
                  MAC2STR(event->event_info.sta_disconnected.mac),
                  event->event_info.sta_disconnected.aid);
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
-        ESP_LOGI(kTag, "STA_DISCONNECTED. %d", event->event_info.disconnected.reason);
+        ESP_LOGI(kEspCxxTag, "STA_DISCONNECTED. %d", event->event_info.disconnected.reason);
         esp_wifi_connect();
         xEventGroupClearBits(g_wifi_event_group, WIFI_CONNECTED_BIT);
         break;
@@ -73,7 +73,7 @@ bool LoadConfigFromNvs(
   size_t password_len = sizeof(wifi_config->sta.password);
   bool has_config = GetWifiSsid((char*)&wifi_config->sta.ssid[0], &ssid_len) &&
     GetWifiPassword((char*)&wifi_config->sta.password[0], &password_len);
-  ESP_LOGW(kTag, "Got config ssid: %.*s password: %.*s",
+  ESP_LOGW(kEspCxxTag, "Got config ssid: %.*s password: %.*s",
            ssid_len, wifi_config->sta.ssid,
            password_len, wifi_config->sta.password);
   if (has_config && ssid_len > 1 && password_len > 1) {
@@ -113,8 +113,8 @@ void WifiConnect(const wifi_config_t& wifi_config, bool is_station) {
   }
   ESP_ERROR_CHECK(esp_wifi_start());
 
-  ESP_LOGI(kTag, "wifi_init finished.");
-  ESP_LOGI(kTag, "%s SSID:%s password:%s",
+  ESP_LOGI(kEspCxxTag, "wifi_init finished.");
+  ESP_LOGI(kEspCxxTag, "%s SSID:%s password:%s",
            is_station ? "connect to ap" : "created network",
            wifi_config.sta.ssid, wifi_config.sta.password);
 }
@@ -164,7 +164,7 @@ void SetWifiSsid(const char* ssid) {
   strncpy(trimmed_ssid, ssid, sizeof(trimmed_ssid));
   trimmed_ssid[sizeof(trimmed_ssid) - 1] = '\0';
 
-  ESP_LOGD(kTag, "Writing ssid: %s", trimmed_ssid);
+  ESP_LOGD(kEspCxxTag, "Writing ssid: %s", trimmed_ssid);
   ESP_ERROR_CHECK(nvs_set_str(nvs_wifi_config.get(), kSsidNvsKey, trimmed_ssid));
 }
 
@@ -175,7 +175,7 @@ void SetWifiPassword(const char* password) {
   strncpy(trimmed_password, password, sizeof(trimmed_password));
   trimmed_password[sizeof(trimmed_password) - 1] = '\0';
 
-  ESP_LOGD(kTag, "Writing password: %s", trimmed_password);
+  ESP_LOGD(kEspCxxTag, "Writing password: %s", trimmed_password);
   ESP_ERROR_CHECK(nvs_set_str(nvs_wifi_config.get(), kPasswordNvsKey, trimmed_password));
 }
 

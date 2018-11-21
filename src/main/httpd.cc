@@ -1,7 +1,6 @@
 #include "httpd.h"
 
 #include "constants.h"
-#include "boot_state.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "event_log.h"

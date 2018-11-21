@@ -7,10 +7,7 @@
 
 namespace esp_cxx {
 
-// TODO(awong): Move to utility header.
-static inline std::experimental::string_view ToStringView(mg_str s) {
-  return {s.p, s.len};
-}
+static inline std::string_view ToStringView(mg_str s) { return {s.p, s.len}; }
 
 enum class HttpMethod {
   kUnknown,
@@ -42,6 +39,42 @@ class HttpRequest {
  private:
   HttpMethod method_ = HttpMethod::kUnknown;
   http_message *raw_message_ = nullptr;
+};
+
+// Mongoose HTTP Multipart is a little odd. The request start comes as an
+// HttpMethod. Then each multipart section comes as a sequence of
+// {kBegin, kData, kData, ..., kEnd} messges. Then the full thing ends
+// with a kRequestEnd that comes as multipart data, which does NOT bookend
+// the start message. This API reflect that state oddity. Clients are
+// left to find a way to bridge the information in the start message
+// with the end message.
+class HttpMultipart {
+ public:
+ enum class State {
+   kBegin,
+   kData,
+   kEnd,
+   kRequestEnd
+ };
+
+  HttpMultipart(mg_http_multipart_part* raw_multipart, State state)
+    : raw_multipart_(raw_multipart), state_(state) {
+  }
+
+  State state() const { return state_;}
+
+  const char* filename() const { return raw_multipart_->file_name; }
+  const char* var_name() const { return raw_multipart_->var_name; }
+  std::string_view data() const { return ToStringView(raw_multipart_->data); }
+  int status() const { return raw_multipart_->status; }
+  void* user_data() { return raw_multipart_->user_data; }
+  void set_user_data(void* user_data) {
+    raw_multipart_->user_data = user_data;
+  }
+
+ private:
+  mg_http_multipart_part *raw_multipart_;
+  State state_;
 };
 
 }  // namespace esp_cxx

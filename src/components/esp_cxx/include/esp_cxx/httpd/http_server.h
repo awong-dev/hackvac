@@ -28,23 +28,24 @@ class HttpServer {
                    void (*handler)(mg_connection*, int event, void* ev_data));
 
   typedef void (*EndPointCallback)(const HttpRequest& request, HttpResponse response);
+  typedef void (*MultipartCallback)(HttpMultipart* multipart, HttpResponse response);
 
-  template <EndPointCallback handler>
+  template <EndPointCallback handler, MultipartCallback multipart_cb = nullptr>
   void RegisterEndpoint(const char* path_pattern) {
-    AddEndpoint(path_pattern, &CxxHandlerAdaptor<handler>);
+    AddEndpoint(path_pattern, &CxxHandlerAdaptor<handler, multipart_cb>);
   }
 
  private:
   // Thunk for executing the actual run loop.
   static void EventPumpThunk(void* parameters);
 
-  template <EndPointCallback handler>
+  template <EndPointCallback handler, MultipartCallback multipart_cb>
   static void CxxHandlerAdaptor(mg_connection* new_connection, int event, void* ev_data) {
-    CxxHandlerWrapper(new_connection, event, ev_data, handler);
+    CxxHandlerWrapper(new_connection, event, ev_data, handler, multipart_cb);
   }
 
   static void CxxHandlerWrapper(mg_connection* new_connection, int event, void* ev_data,
-                                EndPointCallback callback);
+                                EndPointCallback callback, MultipartCallback multipart_cb);
 
   // Pumps events for the http server.
   void EventPumpRunLoop();

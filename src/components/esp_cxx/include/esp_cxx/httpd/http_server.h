@@ -23,45 +23,37 @@ class HttpServer {
                                  void *ev_data, void *user_data);
   };
 
-
   // Starts the server.
   void Start();
 
-  // Adds a handler for the given path_pattern.
-  //
-  // Mongoose is really annoying in that it doesn't allow userdata per
-  // endpoint without invasively changing its API. Any state needed should
-  // be either added to the HttpServer as a context.
-  //
-  // TODO(awong): Add some sort of type-based user-context to the HttpServer
-  // as a way to hack inheritance.
-  void AddEndpoint(const char* path_pattern,
-                   void (*handler)(mg_connection*, int event, void* ev_data, void *user_data));
-  void AddEndpoint(const char* path_pattern, Endpoint* endpoint);
+  // Adds an Endpoint handler for the given path_pattern.
+  void RegisterEndpoint(const char* path_pattern, Endpoint* endpoint);
 
-  typedef void (*HttpCallback)(const HttpRequest& request, HttpResponse response);
+  // Useful for disabling parts of the endpoint handlers.
+  static void IgnoreHttp(const HttpResponse&, HttpResponse) {}
+  static void IgnoreMultipart(HttpMultipart*, HttpResponse) {}
+
+  // Conveience wrapper for adding endpoint handlers using a bare function.
+  typedef void (*HttpCallback)(const HttpRequest& request, bool is_multipart, HttpResponse response);
   typedef void (*HttpMultipartCallback)(HttpMultipart* multipart, HttpResponse response);
-
-  template <HttpCallback handler, HttpMultipartCallback multipart_cb = nullptr>
+  // TODO(awong): Create a do-nothing handler instead of using nullptr.
+  template <HttpCallback handler, HttpMultipartCallback multipart_cb = &IgnoreMultipart>
   void RegisterEndpoint(const char* path_pattern) {
-    AddEndpoint(path_pattern, &CxxHandlerAdaptor<handler, multipart_cb>);
-  }
-
-  void RegisterEndpoint(const char* path_pattern, Endpoint* endpoint) {
-    AddEndpoint(path_pattern, endpoint);
+    static struct : Endpoint {
+      void OnHttp(const HttpRequest& request, bool is_multipart, HttpResponse response) {
+        // TODO(awong): rename handler to be consistent with multipart_cb here and elsewhere.
+        return handler(request, is_multipart, std::move(response));
+      }
+      void OnMultipart(HttpMultipart* multipart, HttpResponse response) {
+        return multipart_cb(multipart, std::move(response));
+      }
+    } endpoint;
+    RegisterEndpoint(path_pattern, &endpoint);
   }
 
  private:
   // Thunk for executing the actual run loop.
   static void EventPumpThunk(void* parameters);
-
-  template <HttpCallback handler, HttpMultipartCallback multipart_cb>
-  static void CxxHandlerAdaptor(mg_connection* new_connection, int event, void* ev_data, void* user_data) {
-    CxxHandlerWrapper(new_connection, event, ev_data, handler, multipart_cb);
-  }
-
-  static void CxxHandlerWrapper(mg_connection* new_connection, int event, void* ev_data,
-                                HttpCallback callback, HttpMultipartCallback multipart_cb);
 
   // Pumps events for the http server.
   void EventPumpRunLoop();

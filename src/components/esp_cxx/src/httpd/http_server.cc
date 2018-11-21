@@ -69,46 +69,8 @@ void HttpServer::Start() {
   xTaskCreate(&HttpServer::EventPumpThunk, name_, XT_STACK_EXTRA_CLIB, this, 2, &pump_task_);
 }
 
-void HttpServer::AddEndpoint(const char* path_pattern,
-                             void (*handler)(mg_connection*, int event, void* ev_data, void* user_data)) {
-  mg_register_http_endpoint(connection_, path_pattern, handler, nullptr);
-}
-
-void HttpServer::AddEndpoint(const char* path_pattern, Endpoint* endpoint) {
+void HttpServer::RegisterEndpoint(const char* path_pattern, Endpoint* endpoint) {
   mg_register_http_endpoint(connection_, path_pattern, &Endpoint::OnHttpEventThunk, endpoint);
-}
-
-void HttpServer::CxxHandlerWrapper(mg_connection* new_connection, int event, void* ev_data,
-                                   HttpCallback callback, HttpMultipartCallback multipart_cb) {
-  bool should_close = false;
-  switch (event) {
-    case MG_EV_HTTP_REQUEST:
-      should_close = true;
-    case MG_EV_HTTP_MULTIPART_REQUEST: {
-      HttpRequest request(static_cast<http_message*>(ev_data));
-      callback(request, HttpResponse(new_connection));
-      return;
-    }
-
-    case MG_EV_HTTP_MULTIPART_REQUEST_END:
-      should_close = true;
-    case MG_EV_HTTP_PART_BEGIN:
-    case MG_EV_HTTP_PART_DATA:
-    case MG_EV_HTTP_PART_END: {
-      HttpMultipart multipart(static_cast<mg_http_multipart_part*>(ev_data),
-                              static_cast<HttpMultipart::State>(event));
-      multipart_cb(&multipart, HttpResponse(new_connection));
-      return;
-    }
-
-    default:
-      should_close = true;
-      return;
-  }
-
-  if (should_close) {
-    new_connection->flags |= MG_F_SEND_AND_CLOSE;
-  }
 }
 
 void HttpServer::EventPumpThunk(void* parameters) {

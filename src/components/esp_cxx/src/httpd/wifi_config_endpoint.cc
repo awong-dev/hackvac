@@ -146,7 +146,7 @@ void UpdateWifiConfig(std::string_view body, HttpResponse response) {
 }
 }  // namespace
 
-void WifiConfigEndpoint(const HttpRequest& request, HttpResponse response) {
+void WifiConfigEndpoint(const HttpRequest& request, bool is_multipart, HttpResponse response) {
   if (request.method() == HttpMethod::kGet) {
     SendWifiConfig(std::move(response));
   } else if (request.method() == HttpMethod::kPost) {

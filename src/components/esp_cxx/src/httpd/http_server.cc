@@ -23,11 +23,16 @@ void HttpServer::Endpoint::OnHttpEventThunk(mg_connection *new_connection, int e
   switch (event) {
     case MG_EV_HTTP_REQUEST:
       should_close = true;
-    case MG_EV_HTTP_MULTIPART_REQUEST: {
-      HttpRequest request(static_cast<http_message*>(ev_data));
-      endpoint->OnHttp(request, event == MG_EV_HTTP_MULTIPART_REQUEST, HttpResponse(new_connection));
+      endpoint->OnHttp(
+          HttpRequest(static_cast<http_message*>(ev_data)),
+          HttpResponse(new_connection));
       break;
-    }
+
+    case MG_EV_HTTP_MULTIPART_REQUEST:
+      endpoint->OnMultipartStart(
+          HttpRequest(static_cast<http_message*>(ev_data)),
+          HttpResponse(new_connection));
+      break;
 
     case MG_EV_HTTP_MULTIPART_REQUEST_END:
       should_close = true;
@@ -36,9 +41,30 @@ void HttpServer::Endpoint::OnHttpEventThunk(mg_connection *new_connection, int e
     case MG_EV_HTTP_PART_END: {
       HttpMultipart multipart(static_cast<mg_http_multipart_part*>(ev_data),
                               static_cast<HttpMultipart::State>(event));
-      endpoint->OnMultipart(&multipart, HttpResponse(new_connection));
+      endpoint->OnMultipart(multipart, HttpResponse(new_connection));
       break;
     }
+
+    case MG_EV_WEBSOCKET_HANDSHAKE_REQUEST:
+      endpoint->OnWebsocketHandshake(
+          HttpRequest(static_cast<http_message*>(ev_data)),
+          HttpResponse(new_connection));
+      break;
+
+    case MG_EV_WEBSOCKET_HANDSHAKE_DONE:
+      endpoint->OnWebsocketHandshakeComplete(HttpResponse(new_connection));
+      break;
+
+    case MG_EV_WEBSOCKET_CONTROL_FRAME:
+    case MG_EV_WEBSOCKET_FRAME:
+      endpoint->OnWebsocketFrame(
+          WebsocketFrame(static_cast<websocket_message*>(ev_data)),
+          WebsocketSender(new_connection));
+      break;
+
+    case MG_EV_CLOSE:
+      endpoint->OnClose();
+      break;
 
     default:
       should_close = true;
@@ -47,6 +73,10 @@ void HttpServer::Endpoint::OnHttpEventThunk(mg_connection *new_connection, int e
 
   if (should_close) {
     new_connection->flags |= MG_F_SEND_AND_CLOSE;
+    HttpResponse response(new_connection);
+    if (!response.HasSentHeaders()) {
+      response.SendError(500);
+    }
   }
 }
 

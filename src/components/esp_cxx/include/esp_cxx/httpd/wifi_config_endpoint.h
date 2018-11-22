@@ -6,7 +6,7 @@
 
 namespace esp_cxx {
 
-void WifiConfigEndpoint(const HttpRequest& request, bool is_multipart, HttpResponse response);
+void WifiConfigEndpoint(HttpRequest request, HttpResponse response);
 
 }  // namespace esp_cxx
 

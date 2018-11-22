@@ -20,56 +20,46 @@ void SendResultJson(mg_connection* nc, int status, const char* msg) {
 */
 
 namespace esp_cxx {
+namespace {
+constexpr decltype(((mg_connection*)0)->flags) kHeaderSentFlag = MG_F_USER_6;
+}  // namespace
 
 HttpResponse::HttpResponse(mg_connection* connection)
    : connection_(connection) {}
 
-HttpResponse::~HttpResponse() {
-}
-
-HttpResponse::HttpResponse(HttpResponse&& other)
-  : state_(other.state_),
-    connection_(other.connection_) {
-  other.state_ = State::kInvalid;
-  other.connection_ = nullptr;
-}
-
-HttpResponse& HttpResponse::operator=(HttpResponse&& other) {
-  state_ = other.state_;
-  connection_ = other.connection_;
-  other.state_ = State::kInvalid;
-  other.connection_ = nullptr;
-  return *this;
+bool HttpResponse::HasSentHeaders() {
+  return (connection_->flags & kHeaderSentFlag);
 }
 
 void HttpResponse::Send(int status_code, int64_t content_length,
                         const char* extra_headers, std::string_view body) {
-  if (state_ != State::kNew) {
-    ESP_LOGW(kEspCxxTag, "SendHead() executed out of kNew state");
+  if (HasSentHeaders()) {
+    ESP_LOGW(kEspCxxTag, "Headers already sent!");
     return;
   }
-  state_ = State::kStarted;
 
   mg_send_head(connection_, status_code, content_length, extra_headers);
+  connection_->flags |= kHeaderSentFlag;
+
   SendMore(body);
 }
 
 void HttpResponse::SendError(int status_code, const char* text) {
-  if (state_ != State::kNew) {
-    ESP_LOGW(kEspCxxTag, "SendError() executed out of kNew state");
+  if (HasSentHeaders()) {
+    ESP_LOGW(kEspCxxTag, "SendError() called after headers!");
     return;
   }
 
   mg_http_send_error(connection_, status_code, text);
-  state_ = State::kClosed;
 }
 
 void HttpResponse::SendMore(std::experimental::string_view data) {
-  if (data.empty()) {
+  if (!HasSentHeaders()) {
+    ESP_LOGW(kEspCxxTag, "SendMore() before headers!");
     return;
   }
-  if (state_ != State::kStarted) {
-    ESP_LOGW(kEspCxxTag, "Send() out of kStarted");
+
+  if (data.empty()) {
     return;
   }
 

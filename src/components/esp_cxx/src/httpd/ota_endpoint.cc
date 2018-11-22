@@ -43,24 +43,20 @@ bool hex_digit(std::string_view input, unsigned char *val) {
 
 }  // namespace
 
-void OtaEndpoint::OnHttp(const HttpRequest& request, bool is_multipart, HttpResponse response) {
-  if (!is_multipart) {
-    response.SendError(400, "Expecting Multipart");
-    return;
-  }
-  if (in_progress) {
+void OtaEndpoint::OnMultipartStart(HttpRequest request, HttpResponse response) {
+  if (in_progress_) {
     response.SendError(400, "Another OTA in progress");
     return;
   }
-  in_progress = true;
+  in_progress_ = true;
 }
 
-void OtaEndpoint::OnMultipart(HttpMultipart* multipart, HttpResponse response) {
-  assert(in_progress);
-  switch (multipart->state()) {
+void OtaEndpoint::OnMultipart(HttpMultipart multipart, HttpResponse response) {
+  assert(in_progress_);
+  switch (multipart.state()) {
     case HttpMultipart::State::kBegin: {
-      ESP_LOGI(kEspCxxTag, "Firmware upload: %s", multipart->var_name().data());
-      if (multipart->var_name() == "firmware") {
+      ESP_LOGI(kEspCxxTag, "Firmware upload: %s", multipart.var_name().data());
+      if (multipart.var_name() == "firmware") {
         // TODO(awong): Maybe pass in content length?
         ota_writer_ = std::make_unique<OtaWriter>();
       }
@@ -68,33 +64,33 @@ void OtaEndpoint::OnMultipart(HttpMultipart* multipart, HttpResponse response) {
     }
 
     case HttpMultipart::State::kData: {
-      if (multipart->var_name() == "md5") {
+      if (multipart.var_name() == "md5") {
         static constexpr char kExpectsMd5[] =
             "Expecting md5 field to be 32-digit hex string";
         // Reading the md5 checksum. Data should be 32 hex digits.
-        if (multipart->data().size() != 32) {
+        if (multipart.data().size() != 32) {
           response.SendError(400, kExpectsMd5);
           return;
         }
         ESP_LOGI(kEspCxxTag, "Read md5");
         has_expected_md5_ = true;
         for (int i = 0; i < expected_md5_.size(); i++) {
-          if (!hex_digit(multipart->data().substr(i*2, 2), &expected_md5_[i])) {
+          if (!hex_digit(multipart.data().substr(i*2, 2), &expected_md5_[i])) {
             response.SendError(400, kExpectsMd5);
-            // TODO(awong): On error... how do we reset the in_progress?
+            // TODO(awong): On error... how do we reset the in_progress_?
             return;
           }
         }
-      } else if (multipart->var_name() == "firmware") {
+      } else if (multipart.var_name() == "firmware") {
         // This is the firmware blob. Write it!
-        ota_writer_->Write(multipart->data());
+        ota_writer_->Write(multipart.data());
       }
       break;
     }
 
     case HttpMultipart::State::kEnd: {
-      ESP_LOGI(kEspCxxTag, "Ending multipart: %s", multipart->var_name().data());
-      if ("firmware" == multipart->var_name()) {
+      ESP_LOGI(kEspCxxTag, "Ending multipart: %s", multipart.var_name().data());
+      if ("firmware" == multipart.var_name()) {
         ota_writer_->Finish();
       }
       break;
@@ -102,7 +98,7 @@ void OtaEndpoint::OnMultipart(HttpMultipart* multipart, HttpResponse response) {
 
     default:
     case HttpMultipart::State::kRequestEnd:
-      in_progress = false;
+      in_progress_ = false;
       // TODO(awong): Send an error.
       ESP_LOGI(kEspCxxTag, "Flashing done");
       int status = 400;

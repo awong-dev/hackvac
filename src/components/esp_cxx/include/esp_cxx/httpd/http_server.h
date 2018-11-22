@@ -48,6 +48,9 @@ class HttpServer {
                                  void *ev_data, void *user_data);
   };
 
+  // Enables WebSocket events.
+  void EnableWebsockets();
+
   // Starts the server.
   void Start();
 

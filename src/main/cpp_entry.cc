@@ -18,7 +18,7 @@
 #include "driver/gpio.h"
 
 #include "esp_cxx/httpd/http_server.h"
-#include "esp_cxx/httpd/ota_endpoint.h"
+#include "esp_cxx/httpd/standard_endpoints.h"
 #include "esp_cxx/httpd/wifi_config_endpoint.h"
 #include "esp_cxx/ota.h"
 #include "esp_cxx/wifi.h"
@@ -115,14 +115,8 @@ void cpp_entry() {
 
   // Run webserver.
   esp_cxx::HttpServer http_server("httpd", ":80");
-  http_server.RegisterEndpoint<&esp_cxx::WifiConfigEndpoint>("/api/wificonfig$");
-
-  esp_cxx::OtaEndpoint ota_endpoint;
-  http_server.RegisterEndpoint("/api/ota$", &ota_endpoint);
-
-  esp_cxx::LogStreamEndpoint log_stream_endpoint;
-  http_server.RegisterEndpoint("/api/log$", &log_stream_endpoint);
-
+  esp_cxx::StandardEndpoints standard_endpoints;
+  standard_endpoints.RegisterEndpoints(&http_server);
   http_server.Start();
 
   // TODO(awong): Add idle task hook ot sleep. Use hte ESP32-IDF hooks and don't create a task directly.

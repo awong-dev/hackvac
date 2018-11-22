@@ -87,7 +87,6 @@ HttpServer::HttpServer(const char* name, const char* port)
     port_(port) {
   mg_mgr_init(&event_manager_, this);
   connection_ = mg_bind(&event_manager_, port_, &DefaultHandlerThunk, nullptr);
-  mg_set_protocol_http_websocket(connection_);
 }
 
 HttpServer::~HttpServer() {
@@ -95,6 +94,10 @@ HttpServer::~HttpServer() {
     vTaskDelete(pump_task_);
   }
   mg_mgr_free(&event_manager_);
+}
+
+void HttpServer::EnableWebsockets() {
+  mg_set_protocol_http_websocket(connection_);
 }
 
 void HttpServer::Start() {

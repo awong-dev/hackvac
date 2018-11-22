@@ -3,7 +3,6 @@
 #include "constants.h"
 #include "controller.h"
 #include "event_log.h"
-#include "httpd.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"

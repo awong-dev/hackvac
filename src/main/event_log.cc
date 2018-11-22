@@ -11,8 +11,6 @@
 #include "freertos/task.h"
 #include "freertos/ringbuf.h"
 
-#include "httpd.h"
-
 namespace hackvac {
 namespace {
 
@@ -92,7 +90,7 @@ void EventLogPublishTask(void* pvParameters) {
       size_t item_size;
       void *data = xRingbufferReceive(g_log_events, &item_size, 100000);
       if (data) {
-        HttpdPublishEvent(data, item_size);
+//        HttpdPublishEvent(data, item_size);
         vRingbufferReturnItem(g_log_events, data);
       }
     }

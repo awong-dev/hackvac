@@ -115,10 +115,9 @@ void OtaEndpoint::OnMultipart(HttpMultipart multipart, HttpResponse response) {
       }
       // Yay! All good!
       static const std::string_view kFirmwareResponse("uploaded firmware md5: ");
-      static constexpr char kContentTypePlain[] = "Content-Type: text/plain";
       char md5hex[32];
       response.Send(status, kFirmwareResponse.size() + sizeof(md5hex),
-                   kContentTypePlain, kFirmwareResponse);
+                   HttpResponse::kContentTypePlain, kFirmwareResponse);
       for (int i = 0; i < actual_md5.size(); ++i) {
         uint8_t byte = actual_md5[i];
         md5hex[i*2] = to_hex(byte);

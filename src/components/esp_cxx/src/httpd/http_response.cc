@@ -24,6 +24,9 @@ namespace {
 constexpr decltype(((mg_connection*)0)->flags) kHeaderSentFlag = MG_F_USER_6;
 }  // namespace
 
+constexpr char HttpResponse::kContentTypePlain[];
+constexpr char HttpResponse::kContentTypeJson[];
+
 HttpResponse::HttpResponse(mg_connection* connection)
    : connection_(connection) {}
 

@@ -10,8 +10,6 @@
 #include "jsmn.h"
 #include "mongoose.h"
 
-static constexpr const char kContentTypeJson[] = "Content-Type: application/json";
-
 namespace esp_cxx {
 
 namespace {
@@ -42,7 +40,7 @@ void SendWifiConfig(HttpResponse response) {
   response.Send(200,
                     kConfigStart.size() + ssid_len + kConfigMid.size() +
                     password_len + kConfigEnd.size(),
-                    kContentTypeJson, kConfigStart);
+                    HttpResponse::kContentTypeJson, kConfigStart);
   response.SendMore({ssid, ssid_len});
   response.SendMore(kConfigMid);
   response.SendMore({password, password_len});

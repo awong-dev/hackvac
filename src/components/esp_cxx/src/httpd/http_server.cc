@@ -87,6 +87,7 @@ HttpServer::HttpServer(const char* name, const char* port)
     port_(port) {
   mg_mgr_init(&event_manager_, this);
   connection_ = mg_bind(&event_manager_, port_, &DefaultHandlerThunk, nullptr);
+  mg_set_protocol_http_websocket(connection_);
 }
 
 HttpServer::~HttpServer() {

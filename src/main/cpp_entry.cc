@@ -116,8 +116,13 @@ void cpp_entry() {
   // Run webserver.
   esp_cxx::HttpServer http_server("httpd", ":80");
   http_server.RegisterEndpoint<&esp_cxx::WifiConfigEndpoint>("/api/wificonfig$");
+
   esp_cxx::OtaEndpoint ota_endpoint;
   http_server.RegisterEndpoint("/api/ota$", &ota_endpoint);
+
+  esp_cxx::LogStreamEndpoint log_stream_endpoint;
+  http_server.RegisterEndpoint("/api/log$", &log_stream_endpoint);
+
   http_server.Start();
 
   // TODO(awong): Add idle task hook ot sleep. Use hte ESP32-IDF hooks and don't create a task directly.

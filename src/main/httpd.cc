@@ -74,48 +74,6 @@ void HandleRestart(mg_connection *nc, int event, void *ev_data, void* user_data)
   esp_restart();
 }
 
-// TODO(awong): Timeout net connections? Otherwise the server can be jammed.
-//  Look at mg_set_timer.
-void HandleEventsStream(mg_connection *nc, int event, void *ev_data, void* user_data) {
-//  ESP_LOGI(kTag, "Requesting event stream %d", event);
-  static constexpr char kEventHello[] = "{ 'data': 'Hello' }";
-  switch (event) {
-    case MG_EV_WEBSOCKET_HANDSHAKE_DONE: {
-      ESP_LOGI(kTag, "handhsake done");
-      mg_send_websocket_frame(nc, WEBSOCKET_OP_TEXT, kEventHello,
-                              strlen(kEventHello));
-      nc->flags |= RECEIVES_EVENT_LOG;
-      IncrementListeners();
-      break;
-    }
-    case MG_EV_CLOSE:
-      ESP_LOGI(kTag, "closing socket");
-      DecrementListeners();
-      break;
-
-    case MG_EV_WEBSOCKET_HANDSHAKE_REQUEST:
-      ESP_LOGI(kTag, "hs request");
-      break;
-    case MG_EV_WEBSOCKET_FRAME:
-      ESP_LOGI(kTag, "received frame");
-      mg_send_websocket_frame(nc, WEBSOCKET_OP_TEXT, kEventHello,
-                              strlen(kEventHello));
-      break;
-    case MG_EV_WEBSOCKET_CONTROL_FRAME: {
-      websocket_message* control_frame = static_cast<websocket_message*>(ev_data);
-      ESP_LOGI(kTag, "received control frame. flags %x, data_len %d, data: '%.*s'",
-               control_frame->flags & 0xf, control_frame->size, control_frame->size, control_frame->data);
-      if ((control_frame->flags & 0xf) ==  WEBSOCKET_OP_PING) {
-        mg_send_websocket_frame(nc, WEBSOCKET_OP_PONG, nullptr, 0);
-      }
-      break;
-    }
-    default:
-      // Ignore these.
-      break;
-  }
-}
-
 void HandleBroadcast(mg_connection* nc, int ev, void* ev_data, void* user_data) {
   if (!(nc->flags & RECEIVES_EVENT_LOG)) {
     return;
@@ -143,7 +101,7 @@ void HttpdTask(void *parameters) {
   mg_register_http_endpoint(c, "/$", &HandleIndex, nullptr);
   mg_register_http_endpoint(c, "/led_on$", &HandleLedOn, nullptr);
   mg_register_http_endpoint(c, "/led_off$", &HandleLedOff, nullptr);
-  mg_register_http_endpoint(c, "/api/events$", &HandleEventsStream, nullptr);
+//  mg_register_http_endpoint(c, "/api/events$", &HandleEventsStream, nullptr);
   mg_register_http_endpoint(c, "/api/restart$", &HandleRestart, nullptr);
 
   while(1) {

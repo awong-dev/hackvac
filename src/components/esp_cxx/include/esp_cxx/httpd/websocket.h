@@ -38,14 +38,12 @@ class WebsocketSender {
     : connection_(connection) {
   }
 
-  bool operator==(const WebsocketSender& other) const {
-    return other.connection_ == connection_;
-  }
-
   void SendFrame(WebsocketOpcode opcode, std::string_view data = {}) {
     mg_send_websocket_frame(connection_, static_cast<int>(opcode), data.data(),
                             data.size());
   }
+
+  mg_connection* connection() { return connection_; }
 
  private:
   mg_connection* connection_;

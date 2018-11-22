@@ -1,19 +1,53 @@
 #include "esp_cxx/httpd/log_stream_endpoint.h"
 
+#include "esp_cxx/httpd/util.h"
 #include "esp_cxx/logging.h"
 #include "esp_log.h"
 
 namespace esp_cxx {
 
+namespace {
+
+void SendLogFrame(mg_connection* nc, int ev, void* ev_data, void* user_data) {
+  /* This should be formatted into json */
+  // Only send to marked connections.
+  if (!(nc->flags & kLogStreamFlag)) {
+    return;
+  }
+
+  switch (ev) {
+    case MG_EV_POLL: {
+      // Write a frame here.
+      size_t len = strlen(static_cast<const char*>(ev_data));
+      mg_send_websocket_frame(nc, WEBSOCKET_OP_TEXT, ev_data, len);
+      break;
+    }
+
+    default:
+      // No other cases should show up.
+      break;
+  }
+}
+
+}  // namespace
+
 void LogStreamEndpoint::OnWebsocketHandshake(HttpRequest request,
                                              HttpResponse response) {
   if (num_listeners_ >= kMaxListeners) {
     response.SendError(503);
+  } else {
+    num_listeners_++;
   }
 }
 
 void LogStreamEndpoint::OnWebsocketHandshakeComplete(WebsocketSender sender) {
-  listeners_.at(num_listeners_) = sender;
+  // Initialize |event_manager_| on the first successful Websocket Connection.
+  if (!event_manager_) {
+    event_manager_ = sender.connection()->mgr;
+  }
+
+  // Mark the logstream for publishing. Used in the mg_broadcast handler.
+  sender.connection()->flags |= kLogStreamFlag;
 }
 
 void LogStreamEndpoint::OnWebsocketFrame(WebsocketFrame frame,
@@ -51,12 +85,16 @@ void LogStreamEndpoint::OnWebsocketFrame(WebsocketFrame frame,
 }
 
 void LogStreamEndpoint::OnWebsocketClosed(WebsocketSender sender) {
-  for (size_t i = 0; i < num_listeners_; ++i) {
-    if (sender == listeners_.at(i)) {
-      listeners_.at(i) = listeners_.at(num_listeners_ - 1);
-      num_listeners_--;
-      break;
-    }
+  num_listeners_--;
+  if (num_listeners_ == 0) {
+    event_manager_ = nullptr;
+  }
+}
+
+void LogStreamEndpoint::PublishLog(std::string_view log) {
+  if (event_manager_) {
+    mg_broadcast(event_manager_, &SendLogFrame,
+                 const_cast<char*>(log.data()), log.size());
   }
 }
 

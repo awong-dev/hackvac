@@ -3,7 +3,7 @@
 
 #include "esp_cxx/httpd/http_server.h"
 
-#include <array>
+#include <atomic>
 
 namespace esp_cxx {
 
@@ -14,9 +14,14 @@ class LogStreamEndpoint : public HttpServer::Endpoint {
   virtual void OnWebsocketFrame(WebsocketFrame frame, WebsocketSender sender);
   virtual void OnWebsocketClosed(WebsocketSender sender);
 
+  void PublishLog(std::string_view log);
+
  private:
+  // Only set if there is some active websocket connection.
+  std::atomic<mg_mgr*> event_manager_{nullptr};
+
+  // Simple avoidance of DoS.
   static constexpr int kMaxListeners = 5;
-  std::array<WebsocketSender, kMaxListeners> listeners_;
   size_t num_listeners_ = 0;
 };
 

@@ -1,5 +1,6 @@
 #include "esp_cxx/httpd/http_response.h"
 
+#include "esp_cxx/httpd/util.h"
 #include "esp_cxx/logging.h"
 
 #include "mongoose.h"
@@ -20,9 +21,6 @@ void SendResultJson(mg_connection* nc, int status, const char* msg) {
 */
 
 namespace esp_cxx {
-namespace {
-constexpr decltype(((mg_connection*)0)->flags) kHeaderSentFlag = MG_F_USER_6;
-}  // namespace
 
 constexpr char HttpResponse::kContentTypePlain[];
 constexpr char HttpResponse::kContentTypeJson[];

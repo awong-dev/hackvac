@@ -22,6 +22,7 @@ void SendResultJson(mg_connection* nc, int status, const char* msg) {
 
 namespace esp_cxx {
 
+constexpr char HttpResponse::kContentTypeHtml[];
 constexpr char HttpResponse::kContentTypePlain[];
 constexpr char HttpResponse::kContentTypeJson[];
 

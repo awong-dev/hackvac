@@ -19,9 +19,17 @@
 
 #include "esp_cxx/httpd/http_server.h"
 #include "esp_cxx/httpd/standard_endpoints.h"
-#include "esp_cxx/httpd/wifi_config_endpoint.h"
 #include "esp_cxx/ota.h"
 #include "esp_cxx/wifi.h"
+
+#define HTML_DECL(name) \
+  extern "C" const uint8_t name##_start[] asm("_binary_" #name "_start"); \
+  extern "C" const uint8_t name##_end[] asm("_binary_" #name "_end");
+#define HTML_LEN(name) (&name##_end[0] - &name##_start[0] - 1)
+#define HTML_CONTENTS(name) (&name##_start[0])
+
+HTML_DECL(resp404_html);
+HTML_DECL(index_html);
 
 static const char *TAG = "hackvac";
 
@@ -114,8 +122,14 @@ void cpp_entry() {
   controller.Init();
 
   // Run webserver.
-  esp_cxx::HttpServer http_server("httpd", ":80");
-  esp_cxx::StandardEndpoints standard_endpoints;
+  std::string_view index_html(
+      reinterpret_cast<const char*>(HTML_CONTENTS(index_html)),
+      HTML_LEN(index_html));
+  std::string_view resp404_html(
+      reinterpret_cast<const char*>(HTML_CONTENTS(resp404_html)),
+      HTML_LEN(resp404_html));
+  esp_cxx::HttpServer http_server("httpd", ":80", resp404_html);
+  esp_cxx::StandardEndpoints standard_endpoints(index_html);
   standard_endpoints.RegisterEndpoints(&http_server);
   http_server.Start();
 

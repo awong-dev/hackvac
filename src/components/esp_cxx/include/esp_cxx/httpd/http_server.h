@@ -12,7 +12,8 @@ namespace esp_cxx {
 
 class HttpServer {
  public:
-  HttpServer(const char* name, const char* port);
+  HttpServer(const char* name, const char* port,
+             std::string_view resp404_html = {});
   ~HttpServer();
 
   class Endpoint {
@@ -91,11 +92,14 @@ class HttpServer {
   // Port to connect to. Usually ":80" is good.
   const char* port_;
 
-  // Bound connection to |port_|.
-  mg_connection* connection_;
+  // Document to return on a 404.
+  std::string_view resp404_html_;
 
   // Event manager for all connections on this HTTP server.
   mg_mgr event_manager_;
+
+  // Bound connection to |port_|.
+  mg_connection* connection_;
 
   // Handle of event pump task.
   TaskHandle_t pump_task_ = nullptr;

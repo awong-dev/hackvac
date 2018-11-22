@@ -4,16 +4,6 @@
 
 #include "esp_log.h"
 
-#define HTML_DECL(name) \
-  extern "C" const uint8_t name##_start[] asm("_binary_" #name "_start"); \
-  extern "C" const uint8_t name##_end[] asm("_binary_" #name "_end");
-#define HTML_LEN(name) (&name##_end[0] - &name##_start[0] - 1)
-#define HTML_CONTENTS(name) (&name##_start[0])
-
-// TODO(awong): Take this as a string_view.
-HTML_DECL(resp404_html);
-HTML_DECL(index_html);
-
 namespace esp_cxx {
 
 void HttpServer::Endpoint::OnHttpEventThunk(mg_connection *new_connection, int event,
@@ -82,11 +72,13 @@ void HttpServer::Endpoint::OnHttpEventThunk(mg_connection *new_connection, int e
   }
 }
 
-HttpServer::HttpServer(const char* name, const char* port)
+HttpServer::HttpServer(const char* name, const char* port,
+                       std::string_view resp404_html)
   : name_(name),
-    port_(port) {
+    port_(port),
+    resp404_html_(resp404_html) {
   mg_mgr_init(&event_manager_, this);
-  connection_ = mg_bind(&event_manager_, port_, &DefaultHandlerThunk, nullptr);
+  connection_ = mg_bind(&event_manager_, port_, &DefaultHandlerThunk, this);
 }
 
 HttpServer::~HttpServer() {
@@ -123,12 +115,22 @@ void HttpServer::DefaultHandlerThunk(struct mg_connection *nc,
                                      int event,
                                      void *event_data,
                                      void* user_data) {
-  if (event == MG_EV_HTTP_REQUEST) {
-    http_message* message = static_cast<http_message*>(event_data);
-    ESP_LOGI(kEspCxxTag, "HTTP received: %.*s for %.*s", message->method.len, message->method.p, message->uri.len, message->uri.p);
-    mg_send_head(nc, 404, HTML_LEN(resp404_html), "Content-Type: text/html");
-    mg_send(nc, HTML_CONTENTS(resp404_html), HTML_LEN(resp404_html));
+  HttpServer* self = static_cast<HttpServer*>(user_data);
+  switch (event) {
+    case MG_EV_HTTP_REQUEST:
+    case MG_EV_HTTP_MULTIPART_REQUEST: {
+      http_message* message = static_cast<http_message*>(event_data);
+      ESP_LOGI(kEspCxxTag, "HTTP received: %.*s for %.*s", message->method.len, message->method.p, message->uri.len, message->uri.p);
+      if (self->resp404_html_.empty()) {
+        mg_http_send_error(nc, 404, nullptr);
+      } else {
+        mg_send_head(nc, 404, self->resp404_html_.size(),
+                     HttpResponse::kContentTypeHtml);
+        mg_send(nc, self->resp404_html_.data(), self->resp404_html_.size());
+      }
+    }
   }
+  nc->flags |= MG_F_SEND_AND_CLOSE;
 }
 
 }  // namespace esp_cxx

@@ -4,6 +4,7 @@
 #include "esp_cxx/logging.h"
 #include "esp_cxx/wifi.h"
 
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "jsmn.h"
 
@@ -35,9 +36,9 @@ void SendWifiConfig(HttpResponse response) {
 
   // TODO(awong): Move to a json response handler.
   response.Send(200,
-                    kConfigStart.size() + ssid_len + kConfigMid.size() +
-                    password_len + kConfigEnd.size(),
-                    HttpResponse::kContentTypeJson, kConfigStart);
+                kConfigStart.size() + ssid_len + kConfigMid.size() +
+                password_len + kConfigEnd.size(),
+                HttpResponse::kContentTypeJson, kConfigStart);
   response.SendMore({ssid, ssid_len});
   response.SendMore(kConfigMid);
   response.SendMore({password, password_len});
@@ -141,9 +142,19 @@ void UpdateWifiConfig(std::string_view body, HttpResponse response) {
 }
 }  // namespace
 
+void IndexEndpoint::OnHttp(HttpRequest request, HttpResponse response) {
+  response.Send(200, index_html_.size(), HttpResponse::kContentTypeHtml,
+                index_html_.data());
+}
+
+
 void StandardEndpoints::RegisterEndpoints(HttpServer* server) {
+  server->RegisterEndpoint("/$", index_endpoint());
   server->RegisterEndpoint<&WifiConfigEndpoint>("/api/wificonfig$");
   server->RegisterEndpoint<&ResetEndpoint>("/api/reset$");
+  server->RegisterEndpoint<&LedOnEndpoint>("/api/led/on$");
+  server->RegisterEndpoint<&LedOffEndpoint>("/api/led/off$");
+
   server->RegisterEndpoint("/api/ota$", ota_endpoint());
 
   server->EnableWebsockets();
@@ -165,6 +176,24 @@ void StandardEndpoints::WifiConfigEndpoint(HttpRequest request, HttpResponse res
   } else {
     response.SendError(400, "Invalid Method");
   }
+}
+
+void StandardEndpoints::LedOnEndpoint(HttpRequest request,
+                                      HttpResponse response) {
+  const char* message =
+    gpio_get_level(GPIO_NUM_2) ? "Was on now on" : "Was off now on";
+  response.Send(200, strlen(message), HttpResponse::kContentTypePlain,
+                message);
+  gpio_set_level(GPIO_NUM_2, 1);
+}
+
+void StandardEndpoints::LedOffEndpoint(HttpRequest request,
+                                       HttpResponse response) {
+  const char* message =
+    gpio_get_level(GPIO_NUM_2) ? "Was on now off" : "Was off now off";
+  response.Send(200, strlen(message), HttpResponse::kContentTypePlain,
+                message);
+  gpio_set_level(GPIO_NUM_2, 0);
 }
 
 }  // namespace esp_cxx

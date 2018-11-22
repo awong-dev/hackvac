@@ -5,6 +5,8 @@
 
 #include "esp_cxx/httpd/http_request.h"
 #include "esp_cxx/httpd/http_response.h"
+#include "esp_cxx/httpd/http_multipart.h"
+#include "esp_cxx/httpd/websocket.h"
 
 namespace esp_cxx {
 

@@ -3,7 +3,6 @@
 
 #include "esp_cxx/httpd/ota_endpoint.h"
 #include "esp_cxx/httpd/log_stream_endpoint.h"
-#include "esp_cxx/httpd/wifi_config_endpoint.h"
 
 namespace esp_cxx {
 class StandardEndpoints {
@@ -15,6 +14,7 @@ class StandardEndpoints {
 
   // Simple endpoints.
   static void ResetEndpoint(HttpRequest request, HttpResponse response);
+  static void WifiConfigEndpoint(HttpRequest request, HttpResponse response);
 
  private:
 

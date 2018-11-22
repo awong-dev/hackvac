@@ -52,7 +52,7 @@ void HttpServer::Endpoint::OnHttpEventThunk(mg_connection *new_connection, int e
       break;
 
     case MG_EV_WEBSOCKET_HANDSHAKE_DONE:
-      endpoint->OnWebsocketHandshakeComplete(HttpResponse(new_connection));
+      endpoint->OnWebsocketHandshakeComplete(WebsocketSender(new_connection));
       break;
 
     case MG_EV_WEBSOCKET_CONTROL_FRAME:
@@ -63,7 +63,9 @@ void HttpServer::Endpoint::OnHttpEventThunk(mg_connection *new_connection, int e
       break;
 
     case MG_EV_CLOSE:
-      endpoint->OnClose();
+      if (new_connection->flags & MG_F_IS_WEBSOCKET) {
+        endpoint->OnWebsocketClosed(WebsocketSender(new_connection));
+      }
       break;
 
     default:

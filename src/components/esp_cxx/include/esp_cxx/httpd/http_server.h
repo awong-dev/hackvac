@@ -22,9 +22,6 @@ class HttpServer {
     // A plain HTTP request has arrived.
     virtual void OnHttp(HttpRequest request, HttpResponse response) {}
 
-    // The connection has been closed. For whatever reason.
-    virtual void OnClose() {}
-    
     // TODO(awong): Support chunked http.
 
     // Multipart lifecycle events.
@@ -43,13 +40,9 @@ class HttpServer {
     // OnWebsocketClosed - websocket connection closed. Always called once
     //                     after OnWebsocketHandshake().
     virtual void OnWebsocketHandshake(HttpRequest request, HttpResponse response) {}
-    virtual void OnWebsocketHandshakeComplete(HttpResponse response) {}
+    virtual void OnWebsocketHandshakeComplete(WebsocketSender sender) {}
     virtual void OnWebsocketFrame(WebsocketFrame frame, WebsocketSender sender) {}
-    // MG_EV_WEBSOCKET_HANDSHAKE_REQUEST = ev_data = html_message.
-    // MG_EV_WEBSOCKET_HANDSHAKE_DONE = null ev_data.
-    // MG_EV_WEBSOCKET_FRAME = websocket_message
-    // MG_EV_WEBSOCKET_CONTROL_FRAME = websocket_message
-    // MG_EV_CLOSE = null ev_data
+    virtual void OnWebsocketClosed(WebsocketSender sender) {}
 
     static void OnHttpEventThunk(mg_connection *nc, int event,
                                  void *ev_data, void *user_data);
@@ -71,6 +64,7 @@ class HttpServer {
         return handler(request, response);
       }
     } endpoint;
+    // TODO(awong): Creating a whole Endpoint for just 1 function is heavyweight. Thin it down.
     RegisterEndpoint(path_pattern, &endpoint);
   }
 

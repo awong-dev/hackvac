@@ -13,7 +13,7 @@ class HttpResponse {
   explicit HttpResponse(mg_connection* connection);
 
   // Content type constants.
-  static constexpr char kContentTypePlain[] = "Content-Type: text/plain; charset=utf-8"";
+  static constexpr char kContentTypePlain[] = "Content-Type: text/plain; charset=utf-8";
   static constexpr char kContentTypeHtml[] = "Content-Type: text/html; charset=utf-8";
   static constexpr char kContentTypeJson[] = "Content-Type: application/json";
 

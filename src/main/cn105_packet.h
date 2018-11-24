@@ -178,6 +178,14 @@ class Cn105Packet {
     uint32_t last_error_ts = 0;
 };
 
+class ConnectPacket {
+ public:
+  static std::unique_ptr<Cn105Packet> Create() {
+    static constexpr std::array<uint8_t, 2> data = { 0xca, 0x01 };
+    return std::make_unique<Cn105Packet>(PacketType::kConnect, data);
+  }
+};
+
 class ConnectAckPacket : public Cn105Packet {
  public:
   static std::unique_ptr<Cn105Packet> Create() {

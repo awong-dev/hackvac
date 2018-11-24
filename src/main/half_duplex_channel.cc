@@ -47,7 +47,10 @@ HalfDuplexChannel::HalfDuplexChannel(const char *name,
 }
 
 HalfDuplexChannel::~HalfDuplexChannel() {
-  vTaskDelete(pump_task_);
+  if (pump_task_) {
+    vTaskDelete(pump_task_);
+  }
+  vQueueDelete(tx_queue_);
 }
 
 void HalfDuplexChannel::Start() {
@@ -79,7 +82,8 @@ void HalfDuplexChannel::Start() {
 void HalfDuplexChannel::EnqueuePacket(std::unique_ptr<Cn105Packet> packet) {
   // TODO(ajwong): Should this be a blocking call or should there be at timeout?
   Cn105Packet* raw_packet = packet.release();
-  xQueueSendToBack(tx_queue_, &raw_packet, (portTickType)portMAX_DELAY);
+  xQueueSendToBack(tx_queue_, &raw_packet,
+                   static_cast<portTickType>(portMAX_DELAY));
 }
 
 // static

@@ -78,6 +78,13 @@ class Controller {
   std::optional<ExtendedSettings> QueryExtendedSettings();
   bool PushExtendedSettings(const ExtendedSettings& extended_settings);
 
+  // Reads and discards packets from |hvac_packet_rx_queue_| until a packet
+  // of |type| found.
+  //
+  // TODO(awong): What's the right timeout.
+  std::unique_ptr<Cn105Packet> AwaitPacketOfType(PacketType type,
+                                                 int timeout_ms = 20);
+
   // Generates an Ack for an info packet.
   std::unique_ptr<Cn105Packet> CreateInfoAck(InfoPacket info);
 
@@ -93,6 +100,9 @@ class Controller {
   // Task that publishes settings changes to the HVAC control unit.
   // Does do anything if |is_passthru_|.
   TaskHandle_t control_task_ = nullptr;
+
+  // Queue of packets received from |hvac_control_|
+  QueueHandle_t hvac_packet_rx_queue_ = nullptr;
 
   // Asynchronous logger to track protocol interactions.
   esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacketThunk> packet_logger_{"packets"};

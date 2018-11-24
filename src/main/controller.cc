@@ -74,13 +74,15 @@ Controller::Controller()
                   packet_logger_.Log(std::move(packet));
                 },
                 GPIO_NUM_23,
-                GPIO_NUM_22) {
+                GPIO_NUM_22),
+    hvac_packet_rx_queue_(xQueueCreate(10, sizeof(Cn105Packet*))) {  // TODO(awong): Pull out constant.
 }
 
 Controller::~Controller() {
   if (control_task_) {
     vTaskDelete(control_task_);
   }
+  vQueueDelete(hvac_packet_rx_queue_);
 }
 
 void Controller::Start() {
@@ -101,6 +103,13 @@ void Controller::OnHvacControlPacket(
     ESP_LOG_BUFFER_HEX_LEVEL(kTag, hvac_packet->raw_bytes(), hvac_packet->packet_size(), ESP_LOG_INFO); 
     thermostat_.EnqueuePacket(std::move(hvac_packet));
     return;
+  } else {
+    // TODO(awong): Decide if HalfDuplexChannel should exclusively expose a
+    // RX queue rather than take a callback. That'd make it symmetrical to the
+    // HalfDuplexChannel::EnqueuePacket() API.
+    Cn105Packet* raw_packet = hvac_packet.release();
+    xQueueSendToBack(hvac_packet_rx_queue_, &raw_packet,
+                     static_cast<portTickType>(portMAX_DELAY));
   }
 }
 
@@ -212,7 +221,11 @@ void Controller::ControlTaskRunloop() {
 }
 
 bool Controller::DoConnect() {
-  return false;
+  hvac_control_.EnqueuePacket(ConnectPacket::Create());
+  std::unique_ptr<Cn105Packet> connect_ack =
+    AwaitPacketOfType(PacketType::kConnectAck);
+  // TODO(awong): How should we handle corrupt but still parsable packets?
+  return connect_ack && connect_ack->IsChecksumValid();
 }
 
 // Queries/Pushes settings over the |hvac_control_| channel.
@@ -232,6 +245,23 @@ std::optional<ExtendedSettings> Controller::QueryExtendedSettings() {
 bool Controller::PushExtendedSettings(
     const ExtendedSettings& extended_settings) {
   return false;
+}
+
+std::unique_ptr<Cn105Packet> Controller::AwaitPacketOfType(
+    PacketType type, int timeout_ms) {
+  // TODO(awong): The timeout code is incorrect as multiple receives should
+  // use increasily smaller timeouts.
+
+  Cn105Packet* packet = nullptr;
+
+  while (xQueueReceive(hvac_packet_rx_queue_, &packet, timeout_ms) == pdTRUE) {
+    if (packet->type() == type) {
+      return std::unique_ptr<Cn105Packet>(packet);
+    } else {
+      delete packet;
+    }
+  }
+  return {};
 }
 
 std::unique_ptr<Cn105Packet> Controller::CreateInfoAck(InfoPacket info) {

@@ -105,10 +105,6 @@ class Cn105Packet {
     // Appends a byte to the Cn105Packet.
     void AppendByte(uint8_t byte);
 
-    // For use by subclasses.
-    // TODO(ajwong): Consider another constructor.
-    static constexpr std::array<uint8_t, 16> kBlank16BytePacket = {};
-
     // Returns true if the header has been read. After this,
     // packet type and data length can be read.
     bool IsHeaderComplete() const;
@@ -186,7 +182,7 @@ class ConnectPacket {
   }
 };
 
-class ConnectAckPacket : public Cn105Packet {
+class ConnectAckPacket {
  public:
   static std::unique_ptr<Cn105Packet> Create() {
     static constexpr std::array<uint8_t, 1> data = { 0x00 };
@@ -194,7 +190,7 @@ class ConnectAckPacket : public Cn105Packet {
   }
 };
 
-class ExtendedConnectAckPacket : public Cn105Packet {
+class ExtendedConnectAckPacket {
  public:
   static std::unique_ptr<Cn105Packet> Create() {
     // TODO(awong): echo back the 0xc9 from the ExtendedConnectPacket.
@@ -328,12 +324,11 @@ class UpdatePacket {
 
 // This Ack seems to always send 16-bytes of 0-data. Doing it just for
 // kicks I guess.
-class UpdateAckPacket : public Cn105Packet {
+class UpdateAckPacket {
  public:
-  UpdateAckPacket() : Cn105Packet(PacketType::kUpdateAck, kBlank16BytePacket) {
-  }
-  static std::unique_ptr<UpdateAckPacket> Create() {
-    return std::make_unique<UpdateAckPacket>();
+  static std::unique_ptr<Cn105Packet> Create() {
+    static constexpr std::array<uint8_t, 16> kBlank16BytePacket = {};
+    return std::make_unique<Cn105Packet>(PacketType::kUpdateAck, kBlank16BytePacket);
   }
 };
 

@@ -3,6 +3,7 @@
 
 #include "half_duplex_channel.h"
 
+#include "esp_cxx/cxx17hack.h"
 #include "esp_cxx/mutex.h"
 #include "esp_cxx/data_logger.h"
 
@@ -47,7 +48,7 @@ class Controller {
   ~Controller();
 
   // Starts the message processing.
-  void Init();
+  void Start();
 
   // Mode changes.
   void set_passthru(bool is_passthru) { is_passthru_ = is_passthru; }
@@ -59,6 +60,23 @@ class Controller {
 
   // Runs on the |thermostat_| channel's message pump task.
   void OnThermostatPacket(std::unique_ptr<Cn105Packet> thermostat_packet);
+
+  // Thunk to invole the ControlTaskRunloop().
+  static void ControlTaskThunk(void *parameters);
+
+  // Task that sends updates to the HVAC control unit when settings change.
+  void ControlTaskRunloop();
+
+  // Attempts connect sequence. Returns on a successful ack.
+  bool DoConnect();
+
+  // Queries/Pushes settings over the |hvac_control_| channel.
+  std::optional<HvacSettings> QuerySettings();
+  bool PushSettings(const HvacSettings& settings);
+
+  // Queries/Pushes extended settings over the |hvac_control_| channel.
+  std::optional<ExtendedSettings> QueryExtendedSettings();
+  bool PushExtendedSettings(const ExtendedSettings& extended_settings);
 
   // Generates an Ack for an info packet.
   std::unique_ptr<Cn105Packet> CreateInfoAck(InfoPacket info);
@@ -72,6 +90,10 @@ class Controller {
   // Channel talking to the thermosat.
   HalfDuplexChannel thermostat_;
 
+  // Task that publishes settings changes to the HVAC control unit.
+  // Does do anything if |is_passthru_|.
+  TaskHandle_t control_task_ = nullptr;
+
   // Asynchronous logger to track protocol interactions.
   esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacketThunk> packet_logger_{"packets"};
 
@@ -80,11 +102,17 @@ class Controller {
    public:
     HvacSettings GetHvacSettings() const;
     void SetHvacSettings(const HvacSettings& hvac_settings);
+    ExtendedSettings GetExtendedSettings() const;
+    void SetExtendedSettings(const ExtendedSettings& extended_settings);
 
    private:
     mutable esp_cxx::Mutex mutex_;
-    // Current settings of the HVAC unit.
+
+    // Current settings to push to the hvac controller.
     HvacSettings hvac_settings_;
+
+    // Current extended settings to push to the hvac controller.
+    ExtendedSettings extended_settings_;
   };
 
   // Hvac state being accessed by multiple tasks.

@@ -12,6 +12,7 @@ constexpr gpio_num_t kPacPower = GPIO_NUM_4;
 constexpr uart_port_t kCn105Uart = UART_NUM_1;
 constexpr gpio_num_t kCn105TxPin = GPIO_NUM_18;
 constexpr gpio_num_t kCn105RxPin = GPIO_NUM_19;
+
 constexpr uart_port_t kTstatUart = UART_NUM_2;
 constexpr gpio_num_t kTstatTxPin = GPIO_NUM_5;
 constexpr gpio_num_t kTstatRxPin = GPIO_NUM_17;
@@ -21,11 +22,8 @@ constexpr gpio_num_t kTstatRxPin = GPIO_NUM_17;
 namespace hackvac {
 
 HvacSettings Controller::SharedData::GetHvacSettings() const {
-  HvacSettings settings;
-
   esp_cxx::AutoMutex lock_(&mutex_);
-  settings = hvac_settings_;
-  return settings;
+  return hvac_settings_;
 }
 
 void Controller::SharedData::SetHvacSettings(const HvacSettings& hvac_settings) {
@@ -42,8 +40,29 @@ void Controller::SharedData::SetHvacSettings(const HvacSettings& hvac_settings) 
            static_cast<int32_t>(hvac_settings.wide_vane));
 }
 
+ExtendedSettings Controller::SharedData::GetExtendedSettings() const {
+  esp_cxx::AutoMutex lock_(&mutex_);
+  return extended_settings_;
+}
+
+void Controller::SharedData::SetExtendedSettings(const ExtendedSettings& extended_settings) {
+  {
+    esp_cxx::AutoMutex lock_(&mutex_);
+    extended_settings_ = extended_settings;
+  }
+  ESP_LOGI(kTag, "extended settings: rt:%d",
+           static_cast<int32_t>(extended_settings.room_temp));
+}
+
 Controller::Controller()
   : hvac_control_("hvac_ctl", kCn105Uart, kCn105TxPin, kCn105RxPin,
+                  // TODO(awong): Send status to the controller about once a second.
+                  // Sequence seems to be:
+                  //    Info: kSettings,
+                  //    Info: kExtendedSettings,
+                  //    Update: kSettings.
+                  //
+                  //    Needs periodic task to does an EnqueuePacket() and waits for responses.
                   [this](std::unique_ptr<Cn105Packet> packet) {
                     this->OnHvacControlPacket(std::move(packet));
                   }),
@@ -58,15 +77,21 @@ Controller::Controller()
                 GPIO_NUM_22) {
 }
 
-Controller::~Controller() = default;
+Controller::~Controller() {
+  if (control_task_) {
+    vTaskDelete(control_task_);
+  }
+}
 
-void Controller::Init() {
+void Controller::Start() {
   gpio_pad_select_gpio(kPacPower);
   gpio_set_direction(kPacPower, GPIO_MODE_OUTPUT);
   gpio_set_level(kPacPower, 1);  // off.
 
   hvac_control_.Start();
   thermostat_.Start();
+
+  xTaskCreate(&Controller::ControlTaskThunk, "controller", 4096, this, 4, &control_task_);
 }
 
 void Controller::OnHvacControlPacket(
@@ -75,6 +100,7 @@ void Controller::OnHvacControlPacket(
     ESP_LOGI(kTag, "hvac_ctl: %d bytes", hvac_packet->packet_size());
     ESP_LOG_BUFFER_HEX_LEVEL(kTag, hvac_packet->raw_bytes(), hvac_packet->packet_size(), ESP_LOG_INFO); 
     thermostat_.EnqueuePacket(std::move(hvac_packet));
+    return;
   }
 }
 
@@ -126,6 +152,86 @@ void Controller::OnThermostatPacket(
 
     packet_logger_.Log(std::move(thermostat_packet));
   }
+}
+
+void Controller::ControlTaskThunk(void *parameters) {
+  static_cast<Controller*>(parameters)->ControlTaskRunloop();
+}
+
+void Controller::ControlTaskRunloop() {
+  bool is_connected_ = false;
+  for (;;) {
+    // TODO(awong):
+    //   First determine if we have established contact with controller.
+    //   If not, then initiaite connect sequence.
+    //
+    //   If connected, then enter 1s sleep loop. Every 1 s, get info from
+    //   controller and publish status updates as necessary. The chatter
+    //   sequence is Info:normal, Info:extended, Update:Normal, Update:Extended
+    //
+    //   On publish, send, and then sleep until update is received from
+    //     OnHvacControlPacket. We need a queue. :-/
+    //
+    //   When waiting, try best to semantically process all packets until expected
+    //     one is found, and the continue to chatter sequence.
+    //
+    //   In the event of a full timeout, update error count. Send channel reset
+    //     sequence (crib for PAC-444CN-1). Then restart connect sequence.
+    //
+    // Wait forever.
+    ulTaskNotifyTake(pdFALSE, portMAX_DELAY);
+
+    while (!is_connected_) {
+      is_connected_ = DoConnect();
+    }
+
+    bool at_least_one_suceeded = false;
+    // Start chatter sequence by requesting state from HVAC controller.
+    std::optional<HvacSettings> settings = QuerySettings();
+    at_least_one_suceeded |= !!settings;
+    std::optional<ExtendedSettings> hvac_extended_settings = QueryExtendedSettings();
+    at_least_one_suceeded |= !!hvac_extended_settings;
+    HvacSettings current_settings = shared_data_.GetHvacSettings();
+    ExtendedSettings current_extended_settings = shared_data_.GetExtendedSettings();
+
+    // TODO(awong): Log the diff from the current state.
+
+    if (!PushSettings(current_settings)) {
+      ESP_LOGW(kTag, "Failed settings update");
+      is_connected_ = false;
+    }
+
+    if (!PushExtendedSettings(current_extended_settings)) {
+      ESP_LOGW(kTag, "Failed extended settings update");
+      is_connected_ = false;
+    }
+
+    // Wait 1 second between chatter bursts.
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+}
+
+bool Controller::DoConnect() {
+  return false;
+}
+
+// Queries/Pushes settings over the |hvac_control_| channel.
+std::optional<HvacSettings> Controller::QuerySettings() {
+  return {};
+}
+
+bool Controller::PushSettings(const HvacSettings& settings) {
+  return false;
+}
+
+// Queries/Pushes extended settings over the |hvac_control_| channel.
+std::optional<ExtendedSettings> Controller::QueryExtendedSettings() {
+  return {};
+}
+
+bool Controller::PushExtendedSettings(
+    const ExtendedSettings& extended_settings) {
+  return false;
 }
 
 std::unique_ptr<Cn105Packet> Controller::CreateInfoAck(InfoPacket info) {

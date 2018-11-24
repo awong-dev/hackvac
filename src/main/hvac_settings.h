@@ -76,6 +76,41 @@ enum class WideVane : uint8_t {
   kSwing = 0x0c,        //
 };
 
+enum class RoomTemp : uint8_t {
+  k10C = 0x00,
+  k11C = 0x01,
+  k12C = 0x02,
+  k13C = 0x03,
+  k14C = 0x04,
+  k15C = 0x05,
+  k16C = 0x06,
+  k17C = 0x07,
+  k18C = 0x08,
+  k19C = 0x09,
+  k20C = 0x0A,
+  k21C = 0x0B,
+  k22C = 0x0C,
+  k23C = 0x0D,
+  k24C = 0x0E,
+  k25C = 0x0F,
+  k26C = 0x0F,
+  k27C = 0x0F,
+  k28C = 0x0F,
+  k29C = 0x0F,
+  k30C = 0x0F,
+  k31C = 0x0F,
+  k32C = 0x0F,
+  k33C = 0x0F,
+  k34C = 0x0F,
+  k35C = 0x0F,
+  k36C = 0x0F,
+  k37C = 0x0F,
+  k38C = 0x0F,
+  k39C = 0x0F,
+  k40C = 0x0F,
+  k41C = 0x0F,
+};
+
 enum class InfoType : uint8_t {
   kSettings = 0x02,
   kExtendedSettings = 0x03,
@@ -101,6 +136,10 @@ struct HvacSettings {
   Fan fan;
   Vane vane;
   WideVane wide_vane;
+};
+
+struct ExtendedSettings {
+  RoomTemp room_temp;
 };
 
 }  // namespace hackvac

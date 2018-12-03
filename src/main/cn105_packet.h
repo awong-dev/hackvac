@@ -66,7 +66,7 @@ class Cn105Packet {
     Cn105Packet();
 
     template <size_t n>
-    Cn105Packet(PacketType type, std::array<uint8_t, n> data)
+    Cn105Packet(PacketType type, const std::array<uint8_t, n>& data)
         : bytes_read_(kHeaderLength + data.size() + kChecksumSize) {
       static_assert(n < std::numeric_limits<uint8_t>::max() &&
                     n < kMaxPacketLength, "array too big");
@@ -267,11 +267,17 @@ template <> struct ExtractConfig<WideVane> {
 class UpdatePacket {
  public:
   explicit UpdatePacket(Cn105Packet* packet) : packet_(packet) {}
+
   static std::unique_ptr<Cn105Packet> Create(const HvacSettings& settings) {
-    return {};
+    auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdate, settings.encoded_bytes());
+    packet->data()[0] = static_cast<uint8_t>(InfoType::kSetSettings);
+    return std::move(packet);
   };
+
   static std::unique_ptr<Cn105Packet> Create(const ExtendedSettings& extended_settings) {
-    return {};
+    auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdate, extended_settings.encoded_bytes());
+    packet->data()[0] = static_cast<uint8_t>(InfoType::kSetExtendedSettings);
+    return std::move(packet);
   };
 
   template <typename T>
@@ -288,12 +294,9 @@ class UpdatePacket {
   }
 
   void ApplyUpdate(HvacSettings* settings) {
-    if (auto power = GetSetting<Power>()) settings->power = power.value();
-    if (auto mode = GetSetting<Mode>()) settings->mode = mode.value();
-    if (auto target_temp = GetSetting<TargetTemp>()) settings->target_temp = target_temp.value();
-    if (auto fan = GetSetting<Fan>()) settings->fan = fan.value();
-    if (auto vane = GetSetting<Vane>()) settings->vane = vane.value();
-    if (auto wide_vane = GetSetting<WideVane>()) settings->wide_vane = wide_vane.value();
+    HvacSettings received_settings(packet_->data());
+    // TODO(awong): copy/assignment needs to be fixed for HvacSettings!
+    *settings = received_settings;
   }
 
  private:
@@ -367,17 +370,9 @@ class InfoAckPacket {
   explicit InfoAckPacket(Cn105Packet* packet) : packet_(packet) {}
 
   static std::unique_ptr<Cn105Packet> Create(const HvacSettings& settings) {
-    std::array<uint8_t, 0x10> setting_data = {};
-    setting_data.at(0) = static_cast<uint8_t>(InfoType::kSettings);
-    // TODO(awong): Make the HvacSettings struct internal representation this.
-    //  It's the "settings" data format.
-    setting_data.at(3) = static_cast<uint8_t>(settings.power);
-    setting_data.at(4) = static_cast<uint8_t>(settings.mode);
-    setting_data.at(5) = static_cast<uint8_t>(settings.target_temp);
-    setting_data.at(6) = static_cast<uint8_t>(settings.fan);
-    setting_data.at(7) = static_cast<uint8_t>(settings.vane);
-    setting_data.at(10) = static_cast<uint8_t>(settings.wide_vane);
-    return std::make_unique<Cn105Packet>(PacketType::kInfoAck, setting_data);
+    auto packet = std::make_unique<Cn105Packet>(PacketType::kInfoAck, settings.encoded_bytes());
+    packet->data()[0] = static_cast<uint8_t>(InfoType::kSettings);
+    return std::move(packet);
   }
 
   InfoType type() const { return static_cast<InfoType>(packet_->data()[0]); }
@@ -393,23 +388,7 @@ class InfoAckPacket {
 
     // TODO(awong): I assume bitfields 1 and 2 are the mirror of the update packet
     // for what settings have been returned.
-    HvacSettings settings;
-    settings.power = static_cast<Power>(packet_->data()[3]);
-    bool hasISee = packet_->data()[4] > 0x08;  // Affects mode field.
-    settings.mode = static_cast<Mode>(packet_->data()[4] - (hasISee ? 0x08 : 0));
-    settings.target_temp = static_cast<TargetTemp>(packet_->data()[5]);
-    settings.fan = static_cast<Fan>(packet_->data()[6]);
-    settings.vane = static_cast<Vane>(packet_->data()[7]);
-    settings.wide_vane = static_cast<WideVane>(packet_->data()[10]);
-
-    // Handle higher resoluation temperature field. This overrides data()[5].
-    if (packet_->data()[11]) {
-      // TODO(awong): This loses 0.5C of resolution. Fix.
-      uint8_t high_res_target_temp = (packet_->data()[11] - 128) / 2;
-      settings.target_temp = static_cast<TargetTemp>(high_res_target_temp);
-    }
-
-    return settings;
+    return HvacSettings(packet_->data());
   }
 
   std::optional<ExtendedSettings> extended_settings() const {

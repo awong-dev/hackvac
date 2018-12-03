@@ -32,12 +32,12 @@ void Controller::SharedData::SetHvacSettings(const HvacSettings& hvac_settings) 
     hvac_settings_ = hvac_settings;
   }
   ESP_LOGI(kTag, "settings: p:%d m:%d, t:%d, f:%d, v:%d, wv:%d",
-           static_cast<int32_t>(hvac_settings.power),
-           static_cast<int32_t>(hvac_settings.mode),
-           31 - static_cast<int32_t>(hvac_settings.target_temp),
-           static_cast<int32_t>(hvac_settings.fan),
-           static_cast<int32_t>(hvac_settings.vane),
-           static_cast<int32_t>(hvac_settings.wide_vane));
+           static_cast<int32_t>(hvac_settings.GetPower().value()),
+           static_cast<int32_t>(hvac_settings.GetMode().value()),
+           hvac_settings.GetTargetTemp().value().whole_degree(),
+           static_cast<int32_t>(hvac_settings.GetFan().value()),
+           static_cast<int32_t>(hvac_settings.GetVane().value()),
+           static_cast<int32_t>(hvac_settings.GetWideVane().value()));
 }
 
 ExtendedSettings Controller::SharedData::GetExtendedSettings() const {
@@ -242,7 +242,7 @@ std::optional<HvacSettings> Controller::QuerySettings() {
 }
 
 bool Controller::PushSettings(const HvacSettings& settings) {
-  hvac_control_.EnqueuePacket(UpdatePacket::Create(settings));
+//  hvac_control_.EnqueuePacket(UpdatePacket::Create(settings));
   std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kUpdateAck);
   UpdateAckPacket update_ack(raw_ack.get());
 

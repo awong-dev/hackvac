@@ -1,9 +1,10 @@
 #ifndef HVAC_SETTINGS_H_
 #define HVAC_SETTINGS_H_
 
+#include <array>
 #include <cstdint>
 
-#include <array>
+#include "esp_cxx/cxx17hack.h"
 
 // This contains the enums and classes for managing HVAC settings.
 // Note that the enum values are overloaded to be the actual byte
@@ -23,6 +24,13 @@ enum class Mode : uint8_t {
   kCool = 0x03,
   kFan = 0x07,
   kAuto = 0x08,
+  // TODO(awong): This Isee stuff seems wrong? Comes from
+  // https://github.com/SwiCago/HeatPump/blob/master/src/HeatPump.cpp
+  kIseeHeat = kHeat + 0x08,
+  kIseeDry = kDry + 0x08,
+  kIseeCool = kCool + 0x08,
+  kIseeFan = kFan + 0x08,
+  kIseeAuto = kAuto + 0x08,
 };
 
 enum class TargetTemp : uint8_t {
@@ -123,13 +131,24 @@ enum class UpdateType : uint8_t {
   kExtendedSettings = 0x07,
 };
 
+// TODO(awong):
+//   I'm betting this is settings commands types that are effectively a common
+//   enum used by both Info/Update. Note that in update, there is a similar format
+//   but with 
+//     0x1 == normal update
+//     0x7 == extended settings update
+//   and those updates are non-overlapping with these.
+//
+// TODO(awong): Rename field type.
 enum class InfoType : uint8_t {
+  kSetSettings = 0x01,
   kSettings = 0x02,
   kExtendedSettings = 0x03,
   // 0x04 is unknown
   kTimers = 0x05,
   kStatus = 0x06,
-  kEnterStandby = 0x09,  // maybe?
+  kSetExtendedSettings = 0x07,
+  kEnterStandby = 0x09,  // maybe? TODO(awong): Remove if we can't figure out what this is.
 };
 
 // Represents temperatures in celcius in 0.5 degree increments. 
@@ -162,67 +181,73 @@ class HalfDegreeTemp {
   uint8_t encoded_temp_;
 };
 
-struct HvacSettings {
-  HvacSettings()
-    : power(Power::kOff),
-      mode(Mode::kAuto),
-      target_temp(TargetTemp::k20C),
-      fan(Fan::kAuto),
-      vane(Vane::kAuto),
-      wide_vane(WideVane::kCenter) {
-  }
-
-  Power power;
-  Mode mode;
-  TargetTemp target_temp;
-  Fan fan;
-  Vane vane;
-  WideVane wide_vane;
-};
-
 // Normal settings for the HVAC controller.
 //
 // This class stores the Power, Mode, TargetTemp, Fan, Vane, and WideVane 
 // settings using the wire format for the Info and Update packets in the
 // CN105 protocol.
-class HvacSettingsData {
+//
+// TODO(awong): Set the bitfields.
+class HvacSettings {
  public:
+  explicit HvacSettings(uint8_t* raw_data = nullptr) : ptr_(raw_data) {
+  }
   static const HalfDegreeTemp kMaxTemp;
   static const HalfDegreeTemp kMinTemp;
 
   // Returns the raw wireformat data bytes for an update packet. The
   // array is only valid until the next mutation of this object. Best
   // to copy the values out immediately.
-  const std::array<uint8_t, 16>& GetDateForUpdate();
+  const std::array<uint8_t, 16>& encoded_bytes() const { return data_; }
 
-  // No setter on this.
-  bool GetHasISee() const;
-
-  Power GetPower() const;
+  std::optional<Power> GetPower() const;
   void SetPower(Power power);
 
-  Mode GetMode() const;
+  std::optional<Mode> GetMode() const;
   void SetMode(Mode mode);
 
-  HalfDegreeTemp GetTargetTemp() const;
+  std::optional<HalfDegreeTemp> GetTargetTemp() const;
   void SetTargetTemp(HalfDegreeTemp target_temp);
 
-  Fan GetFan() const;
+  std::optional<Fan> GetFan() const;
   void SetFan(Fan fan);
 
-  Vane GetVane() const;
+  std::optional<Vane> GetVane() const;
   void SetVane(Vane vane);
 
-  WideVane GetWideVane() const;
+  std::optional<WideVane> GetWideVane() const;
   void GetWideVane(WideVane wide_vane);
 
  private:
+  uint8_t GetByte(size_t offset) const {
+    if (ptr_)
+      return ptr_[offset];
+    return data_[offset];
+  }
+
+  uint8_t& GetByte(size_t offset) {
+    if (ptr_)
+      return ptr_[offset];
+    return data_[offset];
+  }
+
+  // State is held outside this object.
+  //
+  // TODO(awong): Don't mix resident/non-resident modes in the same object.
+  uint8_t* ptr_ = nullptr;
+
   // Settings data stores as expected in the wire format.
   std::array<uint8_t, 16> data_ = {};
 };
 
 struct ExtendedSettings {
+ public:
+  const std::array<uint8_t, 16>& encoded_bytes() const { return data_; }
+
   RoomTemp room_temp;
+ private:
+  uint8_t* ptr_ = nullptr;
+  std::array<uint8_t, 16> data_ = {};
 };
 
 }  // namespace hackvac

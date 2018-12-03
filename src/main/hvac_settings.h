@@ -1,6 +1,10 @@
 #ifndef HVAC_SETTINGS_H_
 #define HVAC_SETTINGS_H_
 
+#include <cstdint>
+
+#include <array>
+
 // This contains the enums and classes for managing HVAC settings.
 // Note that the enum values are overloaded to be the actual byte
 // values stored in the control protocol. This is a small abstraction
@@ -93,22 +97,22 @@ enum class RoomTemp : uint8_t {
   k23C = 0x0D,
   k24C = 0x0E,
   k25C = 0x0F,
-  k26C = 0x0F,
-  k27C = 0x0F,
-  k28C = 0x0F,
-  k29C = 0x0F,
-  k30C = 0x0F,
-  k31C = 0x0F,
-  k32C = 0x0F,
-  k33C = 0x0F,
-  k34C = 0x0F,
-  k35C = 0x0F,
-  k36C = 0x0F,
-  k37C = 0x0F,
-  k38C = 0x0F,
-  k39C = 0x0F,
-  k40C = 0x0F,
-  k41C = 0x0F,
+  k26C = 0x10,
+  k27C = 0x11,
+  k28C = 0x11,
+  k29C = 0x12,
+  k30C = 0x13,
+  k31C = 0x14,
+  k32C = 0x15,
+  k33C = 0x16,
+  k34C = 0x17,
+  k35C = 0x18,
+  k36C = 0x19,
+  k37C = 0x1A,
+  k38C = 0x1B,
+  k39C = 0x1C,
+  k40C = 0x1D,
+  k41C = 0x1E,
 };
 
 enum class UpdateType : uint8_t {
@@ -128,6 +132,36 @@ enum class InfoType : uint8_t {
   kEnterStandby = 0x09,  // maybe?
 };
 
+// Represents temperatures in celcius in 0.5 degree increments. 
+class HalfDegreeTemp {
+ public:
+  HalfDegreeTemp(int temp, bool plus_half)
+    : encoded_temp_(temp * 10 + plus_half ? 5 : 0) {
+  }
+
+  bool operator< (const HalfDegreeTemp& rhs) const {
+    return encoded_temp_ < rhs.encoded_temp_;
+  }
+
+  // The Cn105 wireformat encodes 1/2 degree increments as
+  // as a single byte at 2-times the temperature value. The
+  // byte also seems to always have the highbit set.
+  static HalfDegreeTemp ParseEncoded(uint8_t encoded_temp) {
+    return HalfDegreeTemp(encoded_temp & 0x7F);
+  }
+  uint8_t encoded_temp() const { return 0x80 | encoded_temp_; }
+
+  bool is_half_degree() const { return encoded_temp_ % 2 != 0; }
+  int whole_degree() const { return encoded_temp_ / 2; }
+
+ private:
+  explicit HalfDegreeTemp(uint8_t encoded_temp) : encoded_temp_(encoded_temp & 0x7F) {
+  }
+
+  // Temperature stored as celcius * 2 to allow 1/2 degree resolution.
+  uint8_t encoded_temp_;
+};
+
 struct HvacSettings {
   HvacSettings()
     : power(Power::kOff),
@@ -144,6 +178,47 @@ struct HvacSettings {
   Fan fan;
   Vane vane;
   WideVane wide_vane;
+};
+
+// Normal settings for the HVAC controller.
+//
+// This class stores the Power, Mode, TargetTemp, Fan, Vane, and WideVane 
+// settings using the wire format for the Info and Update packets in the
+// CN105 protocol.
+class HvacSettingsData {
+ public:
+  static const HalfDegreeTemp kMaxTemp;
+  static const HalfDegreeTemp kMinTemp;
+
+  // Returns the raw wireformat data bytes for an update packet. The
+  // array is only valid until the next mutation of this object. Best
+  // to copy the values out immediately.
+  const std::array<uint8_t, 16>& GetDateForUpdate();
+
+  // No setter on this.
+  bool GetHasISee() const;
+
+  Power GetPower() const;
+  void SetPower(Power power);
+
+  Mode GetMode() const;
+  void SetMode(Mode mode);
+
+  HalfDegreeTemp GetTargetTemp() const;
+  void SetTargetTemp(HalfDegreeTemp target_temp);
+
+  Fan GetFan() const;
+  void SetFan(Fan fan);
+
+  Vane GetVane() const;
+  void SetVane(Vane vane);
+
+  WideVane GetWideVane() const;
+  void GetWideVane(WideVane wide_vane);
+
+ private:
+  // Settings data stores as expected in the wire format.
+  std::array<uint8_t, 16> data_ = {};
 };
 
 struct ExtendedSettings {

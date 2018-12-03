@@ -230,21 +230,46 @@ bool Controller::DoConnect() {
 
 // Queries/Pushes settings over the |hvac_control_| channel.
 std::optional<HvacSettings> Controller::QuerySettings() {
+  hvac_control_.EnqueuePacket(InfoPacket::Create(InfoType::kSettings));
+  std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kInfoAck);
+  InfoAckPacket info_ack(raw_ack.get());
+
+  if (info_ack.IsValid() && info_ack.type() == InfoType::kSettings) {
+    return info_ack.settings();
+  }
+
   return {};
 }
 
 bool Controller::PushSettings(const HvacSettings& settings) {
-  return false;
+  hvac_control_.EnqueuePacket(UpdatePacket::Create(settings));
+  std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kUpdateAck);
+  UpdateAckPacket update_ack(raw_ack.get());
+
+  return update_ack.IsValid() && update_ack.type() == UpdateType::kNormalSettings;
 }
 
 // Queries/Pushes extended settings over the |hvac_control_| channel.
 std::optional<ExtendedSettings> Controller::QueryExtendedSettings() {
+  hvac_control_.EnqueuePacket(InfoPacket::Create(InfoType::kExtendedSettings));
+  std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kInfoAck);
+  InfoAckPacket info_ack(raw_ack.get());
+
+  // TODO(awong) : Fold this back into the packet.
+  if (info_ack.IsValid() && info_ack.type() == InfoType::kExtendedSettings) {
+    return info_ack.extended_settings();
+  }
+
   return {};
 }
 
 bool Controller::PushExtendedSettings(
     const ExtendedSettings& extended_settings) {
-  return false;
+  hvac_control_.EnqueuePacket(UpdatePacket::Create(extended_settings));
+  std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kUpdateAck);
+  UpdateAckPacket update_ack(raw_ack.get());
+
+  return update_ack.IsValid() && update_ack.type() == UpdateType::kExtendedSettings;
 }
 
 std::unique_ptr<Cn105Packet> Controller::AwaitPacketOfType(

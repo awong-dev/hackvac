@@ -7,9 +7,10 @@
 #include <array>
 #include <limits>
 #include <memory>
-#include <experimental/optional>
 
 #include "hvac_settings.h"
+
+#include "esp_cxx/cxx17hack.h"
 
 namespace hackvac {
 
@@ -266,9 +267,15 @@ template <> struct ExtractConfig<WideVane> {
 class UpdatePacket {
  public:
   explicit UpdatePacket(Cn105Packet* packet) : packet_(packet) {}
+  static std::unique_ptr<Cn105Packet> Create(const HvacSettings& settings) {
+    return {};
+  };
+  static std::unique_ptr<Cn105Packet> Create(const ExtendedSettings& extended_settings) {
+    return {};
+  };
 
   template <typename T>
-  std::experimental::optional<T> GetSetting() {
+  std::optional<T> GetSetting() {
     if (!HasField(ExtractConfig<T>::kBitfield)) {
       return {};
     }
@@ -290,13 +297,6 @@ class UpdatePacket {
   }
 
  private:
-  enum class UpdateType : uint8_t {
-    // Used for power, mode, target temp, fan, vane, direction.
-    kNormalSettings = 0x01,
-
-    // Used for room temperature.
-    kExtendedSettings = 0x07,
-  };
   UpdateType update_type() { return static_cast<UpdateType>(packet_->data()[0]); }
 
   // Field accessors.
@@ -326,10 +326,21 @@ class UpdatePacket {
 // kicks I guess.
 class UpdateAckPacket {
  public:
+  explicit UpdateAckPacket(Cn105Packet* packet) : packet_(packet) {}
+
   static std::unique_ptr<Cn105Packet> Create() {
     static constexpr std::array<uint8_t, 16> kBlank16BytePacket = {};
     return std::make_unique<Cn105Packet>(PacketType::kUpdateAck, kBlank16BytePacket);
   }
+
+  UpdateType type() const { return static_cast<UpdateType>(packet_->data()[0]); }
+
+  bool IsValid() const {
+    return packet_ && !packet_->IsJunk() && packet_->IsComplete() && packet_->IsChecksumValid();
+  }
+
+ private:
+  Cn105Packet *packet_;
 };
 
 class InfoPacket {
@@ -337,7 +348,15 @@ class InfoPacket {
   // TODO(awong): Assert every packet wrapper takes only well formed packets.
   explicit InfoPacket(Cn105Packet* packet) : packet_(packet) {}
 
-  InfoType type() const { return static_cast<InfoType>(packet_->data()[5]); }
+  static std::unique_ptr<Cn105Packet> Create(InfoType type) {
+    // TODO(awong): constructor for initializing X blank bytes.
+    static constexpr std::array<uint8_t, 16> kBlank16BytePacket = {};
+    auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdateAck, kBlank16BytePacket);
+    packet->data()[0] = static_cast<uint8_t>(type);
+    return std::move(packet);
+  }
+
+  InfoType type() const { return static_cast<InfoType>(packet_->data()[0]); }
 
  private:
   Cn105Packet *packet_;
@@ -345,15 +364,6 @@ class InfoPacket {
 
 class InfoAckPacket {
  public:
-  enum class InfoAckType : uint8_t {
-    kSettings = 0x02,
-    kRoomTemp = 0x03,
-    // 0x04 is unknown
-    kTimers = 0x05,
-    kStatus = 0x06,
-    kEnterStandby = 0x09,  // maybe?
-  };
-
   explicit InfoAckPacket(Cn105Packet* packet) : packet_(packet) {}
 
   static std::unique_ptr<Cn105Packet> Create(const HvacSettings& settings) {
@@ -370,10 +380,14 @@ class InfoAckPacket {
     return std::make_unique<Cn105Packet>(PacketType::kInfoAck, setting_data);
   }
 
-  InfoAckType type() const { return static_cast<InfoAckType>(packet_->data()[0]); }
+  InfoType type() const { return static_cast<InfoType>(packet_->data()[0]); }
 
-  std::experimental::optional<HvacSettings> settings() const {
-    if (type() != InfoAckType::kSettings) {
+  bool IsValid() const {
+    return packet_ && !packet_->IsJunk() && packet_->IsComplete() && packet_->IsChecksumValid();
+  }
+
+  std::optional<HvacSettings> settings() const {
+    if (type() != InfoType::kSettings) {
       return {};
     }
 
@@ -396,6 +410,10 @@ class InfoAckPacket {
     }
 
     return settings;
+  }
+
+  std::optional<ExtendedSettings> extended_settings() const {
+    return {};
   }
 
  private:

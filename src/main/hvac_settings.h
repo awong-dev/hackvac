@@ -111,6 +111,14 @@ enum class RoomTemp : uint8_t {
   k41C = 0x0F,
 };
 
+enum class UpdateType : uint8_t {
+  // Used for power, mode, target temp, fan, vane, direction.
+  kNormalSettings = 0x01,
+
+  // Used for room temperature.
+  kExtendedSettings = 0x07,
+};
+
 enum class InfoType : uint8_t {
   kSettings = 0x02,
   kExtendedSettings = 0x03,

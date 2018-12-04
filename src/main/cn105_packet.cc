@@ -92,8 +92,4 @@ void Cn105Packet::DebugLog() {
   }
 }
 
-////
-//// Packet Factories.
-////
-
 }  // namespace hackvac

@@ -2,6 +2,7 @@
 #define CN105_H_
 
 #include "half_duplex_channel.h"
+#include "cn105_protocol.h"
 
 #include "esp_cxx/cxx17hack.h"
 #include "esp_cxx/mutex.h"

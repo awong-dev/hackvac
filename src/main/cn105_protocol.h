@@ -4,10 +4,26 @@
 #include "cn105_packet.h"
 
 // Set of classes that front Cn105Packet to parse or create specific packet
-// types.
+// types comprising the CN105 protocol.
+//
+// Cn105 is a series of command/ack packet pairs sent from the client to the
+// HVAC controller. The main pairs are
+//
+// Connect/ConnectAck,
+// ExtendedConnect/ExtendedConnectAck,
+// Update/UpdateAck  (This is should be called Set)
+// Info/InfoAck  (This is should be called Get)
+//
+// The Update and InfoAck packets send and receive setting information. The
+// structure of the data bytes in both seem to be the same. Even the data
+// byte that indicates the action (SetSettings =0x01, GetSettings=0x02)
+// seem to avoid colliding in value even though the values can be sorted
+// into two sets which can only be used sensibly with either Update or
+// InfoAck.
 
 namespace hackvac {
 
+// TODO(ajwong): Get rid of this and move it into the raw packet.
 static constexpr std::array<uint8_t, 16> kBlank16BytePacket = {};
 
 class ConnectPacket {
@@ -49,13 +65,13 @@ class UpdatePacket {
 
   static std::unique_ptr<Cn105Packet> Create(const StoredHvacSettings& settings) {
     auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdate, settings.encoded_bytes());
-    packet->data()[0] = static_cast<uint8_t>(InfoType::kSetSettings);
+    packet->data()[0] = static_cast<uint8_t>(CommandType::kSetSettings);
     return std::move(packet);
   };
 
   static std::unique_ptr<Cn105Packet> Create(const ExtendedSettings& extended_settings) {
     auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdate, extended_settings.encoded_bytes());
-    packet->data()[0] = static_cast<uint8_t>(InfoType::kSetExtendedSettings);
+    packet->data()[0] = static_cast<uint8_t>(CommandType::kSetExtendedSettings);
     return std::move(packet);
   };
 
@@ -95,14 +111,14 @@ class InfoPacket {
   // TODO(awong): Assert every packet wrapper takes only well formed packets.
   explicit InfoPacket(Cn105Packet* packet) : packet_(packet) {}
 
-  static std::unique_ptr<Cn105Packet> Create(InfoType type) {
+  static std::unique_ptr<Cn105Packet> Create(CommandType type) {
     // TODO(awong): constructor for initializing X blank bytes.
     auto packet = std::make_unique<Cn105Packet>(PacketType::kInfo, kBlank16BytePacket);
     packet->data()[0] = static_cast<uint8_t>(type);
     return std::move(packet);
   }
 
-  InfoType type() const { return static_cast<InfoType>(packet_->data()[0]); }
+  CommandType type() const { return static_cast<CommandType>(packet_->data()[0]); }
 
  private:
   Cn105Packet *packet_;
@@ -114,18 +130,18 @@ class InfoAckPacket {
 
   static std::unique_ptr<Cn105Packet> Create(const StoredHvacSettings& settings) {
     auto packet = std::make_unique<Cn105Packet>(PacketType::kInfoAck, settings.encoded_bytes());
-    packet->data()[0] = static_cast<uint8_t>(InfoType::kSettings);
+    packet->data()[0] = static_cast<uint8_t>(CommandType::kSettings);
     return std::move(packet);
   }
 
-  InfoType type() const { return static_cast<InfoType>(packet_->data()[0]); }
+  CommandType type() const { return static_cast<CommandType>(packet_->data()[0]); }
 
   bool IsValid() const {
     return packet_ && !packet_->IsJunk() && packet_->IsComplete() && packet_->IsChecksumValid();
   }
 
   std::optional<HvacSettings> settings() const {
-    if (type() != InfoType::kSettings) {
+    if (type() != CommandType::kSettings) {
       return {};
     }
 

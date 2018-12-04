@@ -138,9 +138,7 @@ enum class UpdateType : uint8_t {
 //     0x1 == normal update
 //     0x7 == extended settings update
 //   and those updates are non-overlapping with these.
-//
-// TODO(awong): Rename field type.
-enum class InfoType : uint8_t {
+enum class CommandType : uint8_t {
   kSetSettings = 0x01,
   kSettings = 0x02,
   kExtendedSettings = 0x03,

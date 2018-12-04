@@ -230,11 +230,11 @@ bool Controller::DoConnect() {
 
 // Queries/Pushes settings over the |hvac_control_| channel.
 std::optional<HvacSettings> Controller::QuerySettings() {
-  hvac_control_.EnqueuePacket(InfoPacket::Create(InfoType::kSettings));
+  hvac_control_.EnqueuePacket(InfoPacket::Create(CommandType::kSettings));
   std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kInfoAck);
   InfoAckPacket info_ack(raw_ack.get());
 
-  if (info_ack.IsValid() && info_ack.type() == InfoType::kSettings) {
+  if (info_ack.IsValid() && info_ack.type() == CommandType::kSettings) {
     return info_ack.settings();
   }
 
@@ -251,12 +251,12 @@ bool Controller::PushSettings(const StoredHvacSettings& settings) {
 
 // Queries/Pushes extended settings over the |hvac_control_| channel.
 std::optional<ExtendedSettings> Controller::QueryExtendedSettings() {
-  hvac_control_.EnqueuePacket(InfoPacket::Create(InfoType::kExtendedSettings));
+  hvac_control_.EnqueuePacket(InfoPacket::Create(CommandType::kExtendedSettings));
   std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kInfoAck);
   InfoAckPacket info_ack(raw_ack.get());
 
   // TODO(awong) : Fold this back into the packet.
-  if (info_ack.IsValid() && info_ack.type() == InfoType::kExtendedSettings) {
+  if (info_ack.IsValid() && info_ack.type() == CommandType::kExtendedSettings) {
     return info_ack.extended_settings();
   }
 
@@ -291,14 +291,14 @@ std::unique_ptr<Cn105Packet> Controller::AwaitPacketOfType(
 
 std::unique_ptr<Cn105Packet> Controller::CreateInfoAck(InfoPacket info) {
   switch (info.type()) {
-    case InfoType::kSettings:
+    case CommandType::kSettings:
       return InfoAckPacket::Create(shared_data_.GetStoredHvacSettings());
 
       // TODO(awong): Implement.
-    case InfoType::kExtendedSettings:
-    case InfoType::kTimers:
-    case InfoType::kStatus:
-    case InfoType::kEnterStandby:
+    case CommandType::kExtendedSettings:
+    case CommandType::kTimers:
+    case CommandType::kStatus:
+    case CommandType::kEnterStandby:
     default:
       // Unknown packet type. Ack with a status.
       //

@@ -32,12 +32,12 @@ void Controller::SharedData::SetStoredHvacSettings(const StoredHvacSettings& hva
     hvac_settings_ = hvac_settings;
   }
   ESP_LOGI(kTag, "settings: p:%d m:%d, t:%d, f:%d, v:%d, wv:%d",
-           static_cast<int32_t>(hvac_settings.GetPower().value()),
-           static_cast<int32_t>(hvac_settings.GetMode().value()),
+           static_cast<int32_t>(hvac_settings.Get<Power>().value()),
+           static_cast<int32_t>(hvac_settings.Get<Mode>().value()),
            hvac_settings.GetTargetTemp().value().whole_degree(),
-           static_cast<int32_t>(hvac_settings.GetFan().value()),
-           static_cast<int32_t>(hvac_settings.GetVane().value()),
-           static_cast<int32_t>(hvac_settings.GetWideVane().value()));
+           static_cast<int32_t>(hvac_settings.Get<Fan>().value()),
+           static_cast<int32_t>(hvac_settings.Get<Vane>().value()),
+           static_cast<int32_t>(hvac_settings.Get<WideVane>().value()));
 }
 
 ExtendedSettings Controller::SharedData::GetExtendedSettings() const {

@@ -181,40 +181,113 @@ class HalfDegreeTemp {
   uint8_t encoded_temp_;
 };
 
+namespace internal {
+enum class UpdateBitfield : uint8_t {
+  kPowerFlag = 0x01,
+  kModeFlag = 0x02,
+  kTempFlag = 0x04,
+  kFanFlag = 0x08,
+  kVaneFlag = 0x10,
+  kWideVaneFlag,
+};
+
+template <UpdateBitfield field>
+struct Bitfield {
+  static bool Has(const uint8_t* data_ptr) {
+      return data_ptr[1] & static_cast<uint8_t>(field);
+  }
+  static void Set(uint8_t* data_ptr) {
+      data_ptr[1] |= static_cast<uint8_t>(field);
+  }
+  static void Unset(uint8_t* data_ptr) {
+      data_ptr[1] &= ~static_cast<uint8_t>(field);
+  }
+};
+
+template <>
+struct Bitfield<UpdateBitfield::kWideVaneFlag> {
+  static bool Has(const uint8_t* data_ptr) { return data_ptr[2] & 0x1; }
+  static void Set(uint8_t* data_ptr) { data_ptr[2] |= 0x1; }
+  static void Unset(uint8_t* data_ptr) { data_ptr[2] &= 0x1; }
+};
+
+template <typename T> struct ExtractConfig;
+template <> struct ExtractConfig<Power> {
+  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kPowerFlag;
+  constexpr static int kDataPos = 3;
+};
+template <> struct ExtractConfig<Mode> {
+  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kModeFlag;
+  constexpr static int kDataPos = 4;
+};
+template <> struct ExtractConfig<Fan> {
+  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kFanFlag;
+  constexpr static int kDataPos = 6;
+};
+template <> struct ExtractConfig<Vane> {
+  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kVaneFlag;
+  constexpr static int kDataPos = 7;
+};
+template <> struct ExtractConfig<WideVane> {
+  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kWideVaneFlag;
+  constexpr static int kDataPos = 10;
+};
+}  // namespace internal
+
 // Normal settings for the HVAC controller.
 //
 // This class stores the Power, Mode, TargetTemp, Fan, Vane, and WideVane 
 // settings using the wire format for the Info and Update packets in the
 // CN105 protocol.
 //
-// TODO(awong): Set the bitfields.
+// Control Update (byte0)
+//   0x01 = update all standard settings. Next 2 bytes are bitfields.
+//            byte1 = power 0x1, mode 0x2, temp 0x4, fan 0x8, vane 0x10, dir 0x80
+//            byte2 = wiadevane 0x1 
+//          Data for each is in a corresponding byte.
+//            byte3 = Power
+//            byte4 = Mode
+//            byte5 = Temp (0x00 for temp seems to mean "max" and not 31-celcius)
+//            byte6 = Fan
+//            byte7 = Vane
+//            byte10 = Dir
 class HvacSettings {
  public:
   static const HalfDegreeTemp kMaxTemp;
   static const HalfDegreeTemp kMinTemp;
 
   explicit HvacSettings(uint8_t* raw_data) : data_ptr_(raw_data) {
+    // TODO(awong): Assert error is kSetSettings?
   }
 
-  std::optional<Power> GetPower() const;
-  void SetPower(Power power);
+  template <typename T>
+  std::optional<T> Get() const {
+    if (!Bitfield<ExtractConfig<T>::kBitfield>::Has(data_ptr_)) {
+      return {};
+    }
+    return static_cast<T>(data_ptr_[ExtractConfig<T>::kDataPos]);
+  }
 
-  std::optional<Mode> GetMode() const;
-  void SetMode(Mode mode);
+  template <typename T>
+  void Set(std::optional<T> setting) const {
+    constexpr UpdateBitfield field = ExtractConfig<T>::kBitfield;
+    if (setting) {
+      Bitfield<field>::Set(data_ptr_);
+      data_ptr_[ExtractConfig<T>::kDataPos] = static_cast<uint8_t>(setting);
+    } else {
+      Bitfield<field>::Unset(data_ptr_);
+      data_ptr_[ExtractConfig<T>::kDataPos] = 0x00;
+    }
+  }
 
   std::optional<HalfDegreeTemp> GetTargetTemp() const;
-  void SetTargetTemp(HalfDegreeTemp target_temp);
-
-  std::optional<Fan> GetFan() const;
-  void SetFan(Fan fan);
-
-  std::optional<Vane> GetVane() const;
-  void SetVane(Vane vane);
-
-  std::optional<WideVane> GetWideVane() const;
-  void GetWideVane(WideVane wide_vane);
+  void SetTargetTemp(std::optional<HalfDegreeTemp> target_temp);
 
  private:
+  using UpdateBitfield = internal::UpdateBitfield;
+  template <UpdateBitfield field> using Bitfield = internal::Bitfield<field>;
+  template <typename T> using ExtractConfig = internal::ExtractConfig<T>;
+
   uint8_t* data_ptr_ = nullptr;
 };
 
@@ -239,6 +312,11 @@ class StoredHvacSettings : public HvacSettings {
   std::array<uint8_t, 16> data_ = {};
 };
 
+//            byte0 = room temp 0x1, 
+//            byte1 = ???
+//            room temp is first byte after.
+//            NOTE: MHK1 sends 0x80 for data if setting is nonsense (negative)
+//                  yielding 0x00 on byte0 bitflag.
 struct ExtendedSettings {
  public:
   const std::array<uint8_t, 16>& encoded_bytes() const { return data_; }

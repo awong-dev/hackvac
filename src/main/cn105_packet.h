@@ -206,64 +206,8 @@ class ExtendedConnectAckPacket {
 
 // For UPDATE (0x41), the first data byte is the setting to change.
 //   Control Update Extended (byte0)
+//   0x01 = set a bunch of settings.
 //   0x07 = set current room temperature
-//            byte0 = room temp 0x1, 
-//            byte1 = ???
-//            room temp is first byte after.
-//            NOTE: MHK1 sends 0x80 for data if setting is nonsense (negative)
-//                  yielding 0x00 on byte0 bitflag.
-//
-//   Control Update (byte0)
-//   0x01 = update all standard settings. Next 2 bytes are bitfields.
-//            byte1 = power 0x1, mode 0x2, temp 0x4, fan 0x8, vane 0x10, dir 0x80
-//            byte2 = wiadevane 0x1 
-//          Data for each is in a corresponding byte.
-//            byte3 = Power
-//            byte4 = Mode
-//            byte5 = Temp (0x00 for temp seems to mean "max" and not 31-celcius)
-//            byte6 = Fan
-//            byte7 = Vane
-//            byte10 = Dir
-
-//  TODO(awong): Move this into an internal namespace.
-enum class UpdateBitfield : uint8_t {
-  kPowerFlag = 0x01,
-  kModeFlag = 0x02,
-  kTempFlag = 0x04,
-  kFanFlag = 0x08,
-  kVaneFlag = 0x10,
-  kWideVaneFlag = 0x80,
-};
-enum class ExtendedUpdateBitfield : uint8_t {
-  kRoomTempFlag = 0x01,
-};
-template <typename T> struct ExtractConfig;
-template <> struct ExtractConfig<Power> {
-  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kPowerFlag;
-  constexpr static int kDataPos = 3;
-};
-template <> struct ExtractConfig<Mode> {
-  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kModeFlag;
-  constexpr static int kDataPos = 4;
-};
-template <> struct ExtractConfig<TargetTemp> {
-  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kTempFlag;
-  constexpr static int kDataPos = 5;
-};
-template <> struct ExtractConfig<Fan> {
-  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kFanFlag;
-  constexpr static int kDataPos = 6;
-};
-template <> struct ExtractConfig<Vane> {
-  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kVaneFlag;
-  constexpr static int kDataPos = 7;
-};
-template <> struct ExtractConfig<WideVane> {
-  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kWideVaneFlag;
-  constexpr static int kDataPos = 10;
-};
-
-// TODO(awong): Handle WideVane.
 class UpdatePacket {
  public:
   explicit UpdatePacket(Cn105Packet* packet) : packet_(packet) {}
@@ -280,19 +224,6 @@ class UpdatePacket {
     return std::move(packet);
   };
 
-  template <typename T>
-  std::optional<T> GetSetting() {
-    if (!HasField(ExtractConfig<T>::kBitfield)) {
-      return {};
-    }
-    return static_cast<T>(packet_->data()[ExtractConfig<T>::kDataPos]);
-  }
-  template <typename T>
-  void SetSetting(T value) {
-    SetField(ExtractConfig<T>::kBitfield);
-    packet_->data()[ExtractConfig<T>::kDataPos] = static_cast<uint8_t>(value);
-  }
-
   void ApplyUpdate(StoredHvacSettings* settings) {
     HvacSettings received_settings(packet_->data());
     // TODO(awong): copy/assignment needs to be fixed for StoredHvacSettings!
@@ -300,27 +231,6 @@ class UpdatePacket {
   }
 
  private:
-  UpdateType update_type() { return static_cast<UpdateType>(packet_->data()[0]); }
-
-  // Field accessors.
-  // TODO(ajwong): widevane support on byte 2.
-  bool HasField(UpdateBitfield field) {
-    return update_type() == UpdateType::kNormalSettings &&
-      packet_->data()[1] & static_cast<uint8_t>(field);
-  }
-  void SetField(UpdateBitfield field) {
-    packet_->data()[0] = static_cast<uint8_t>(UpdateType::kNormalSettings);
-    packet_->data()[1] |= static_cast<uint8_t>(field);
-  }
-  bool HasField(ExtendedUpdateBitfield field) {
-    return update_type() == UpdateType::kExtendedSettings &&
-      packet_->data()[1] & static_cast<uint8_t>(field);
-  }
-  void SetField(ExtendedUpdateBitfield field) {
-    packet_->data()[0] = static_cast<uint8_t>(UpdateType::kExtendedSettings);
-    packet_->data()[1] |= static_cast<uint8_t>(field);
-  }
-
   // Not owned.
   Cn105Packet* packet_;
 };

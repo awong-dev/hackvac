@@ -268,7 +268,7 @@ class UpdatePacket {
  public:
   explicit UpdatePacket(Cn105Packet* packet) : packet_(packet) {}
 
-  static std::unique_ptr<Cn105Packet> Create(const HvacSettings& settings) {
+  static std::unique_ptr<Cn105Packet> Create(const StoredHvacSettings& settings) {
     auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdate, settings.encoded_bytes());
     packet->data()[0] = static_cast<uint8_t>(InfoType::kSetSettings);
     return std::move(packet);
@@ -293,10 +293,10 @@ class UpdatePacket {
     packet_->data()[ExtractConfig<T>::kDataPos] = static_cast<uint8_t>(value);
   }
 
-  void ApplyUpdate(HvacSettings* settings) {
+  void ApplyUpdate(StoredHvacSettings* settings) {
     HvacSettings received_settings(packet_->data());
-    // TODO(awong): copy/assignment needs to be fixed for HvacSettings!
-    *settings = received_settings;
+    // TODO(awong): copy/assignment needs to be fixed for StoredHvacSettings!
+    settings->MergeUpdate(received_settings);
   }
 
  private:
@@ -369,7 +369,7 @@ class InfoAckPacket {
  public:
   explicit InfoAckPacket(Cn105Packet* packet) : packet_(packet) {}
 
-  static std::unique_ptr<Cn105Packet> Create(const HvacSettings& settings) {
+  static std::unique_ptr<Cn105Packet> Create(const StoredHvacSettings& settings) {
     auto packet = std::make_unique<Cn105Packet>(PacketType::kInfoAck, settings.encoded_bytes());
     packet->data()[0] = static_cast<uint8_t>(InfoType::kSettings);
     return std::move(packet);

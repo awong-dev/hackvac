@@ -190,15 +190,11 @@ class HalfDegreeTemp {
 // TODO(awong): Set the bitfields.
 class HvacSettings {
  public:
-  explicit HvacSettings(uint8_t* raw_data = nullptr) : ptr_(raw_data) {
-  }
   static const HalfDegreeTemp kMaxTemp;
   static const HalfDegreeTemp kMinTemp;
 
-  // Returns the raw wireformat data bytes for an update packet. The
-  // array is only valid until the next mutation of this object. Best
-  // to copy the values out immediately.
-  const std::array<uint8_t, 16>& encoded_bytes() const { return data_; }
+  explicit HvacSettings(uint8_t* raw_data) : data_ptr_(raw_data) {
+  }
 
   std::optional<Power> GetPower() const;
   void SetPower(Power power);
@@ -219,23 +215,26 @@ class HvacSettings {
   void GetWideVane(WideVane wide_vane);
 
  private:
-  uint8_t GetByte(size_t offset) const {
-    if (ptr_)
-      return ptr_[offset];
-    return data_[offset];
+  uint8_t* data_ptr_ = nullptr;
+};
+
+// HvacSettings that provides its own storage. This is likely most often
+// used to actually store the settings whereas HvacSettings can be used
+// to parse a chunk of data out of a received packet.
+class StoredHvacSettings : public HvacSettings {
+ public:
+  StoredHvacSettings() : HvacSettings(data_.data()) {
   }
 
-  uint8_t& GetByte(size_t offset) {
-    if (ptr_)
-      return ptr_[offset];
-    return data_[offset];
+  void MergeUpdate(const HvacSettings& settings_update) {
   }
+    
+  // Returns the raw wireformat data bytes for an update packet. The
+  // array is only valid until the next mutation of this object. Best
+  // to copy the values out immediately.
+  const std::array<uint8_t, 16>& encoded_bytes() const { return data_; }
 
-  // State is held outside this object.
-  //
-  // TODO(awong): Don't mix resident/non-resident modes in the same object.
-  uint8_t* ptr_ = nullptr;
-
+ private:
   // Settings data stores as expected in the wire format.
   std::array<uint8_t, 16> data_ = {};
 };

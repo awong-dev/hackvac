@@ -21,12 +21,12 @@ constexpr gpio_num_t kTstatRxPin = GPIO_NUM_17;
 
 namespace hackvac {
 
-HvacSettings Controller::SharedData::GetHvacSettings() const {
+StoredHvacSettings Controller::SharedData::GetStoredHvacSettings() const {
   esp_cxx::AutoMutex lock_(&mutex_);
   return hvac_settings_;
 }
 
-void Controller::SharedData::SetHvacSettings(const HvacSettings& hvac_settings) {
+void Controller::SharedData::SetStoredHvacSettings(const StoredHvacSettings& hvac_settings) {
   {
     esp_cxx::AutoMutex lock_(&mutex_);
     hvac_settings_ = hvac_settings;
@@ -140,9 +140,9 @@ void Controller::OnThermostatPacket(
           {
             // TODO(awong): Extract into a process function like CreateInfoAck().
             UpdatePacket update(thermostat_packet.get());
-            HvacSettings new_settings = shared_data_.GetHvacSettings();
+            StoredHvacSettings new_settings = shared_data_.GetStoredHvacSettings();
             update.ApplyUpdate(&new_settings);
-            shared_data_.SetHvacSettings(new_settings);
+            shared_data_.SetStoredHvacSettings(new_settings);
             ESP_LOGI(kTag, "Sending UpdateACK");
             thermostat_.EnqueuePacket(UpdateAckPacket::Create());
             break;
@@ -200,7 +200,7 @@ void Controller::ControlTaskRunloop() {
     at_least_one_suceeded |= !!settings;
     std::optional<ExtendedSettings> hvac_extended_settings = QueryExtendedSettings();
     at_least_one_suceeded |= !!hvac_extended_settings;
-    HvacSettings current_settings = shared_data_.GetHvacSettings();
+    StoredHvacSettings current_settings = shared_data_.GetStoredHvacSettings();
     ExtendedSettings current_extended_settings = shared_data_.GetExtendedSettings();
 
     // TODO(awong): Log the diff from the current state.
@@ -241,7 +241,7 @@ std::optional<HvacSettings> Controller::QuerySettings() {
   return {};
 }
 
-bool Controller::PushSettings(const HvacSettings& settings) {
+bool Controller::PushSettings(const StoredHvacSettings& settings) {
 //  hvac_control_.EnqueuePacket(UpdatePacket::Create(settings));
   std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kUpdateAck);
   UpdateAckPacket update_ack(raw_ack.get());
@@ -292,7 +292,7 @@ std::unique_ptr<Cn105Packet> Controller::AwaitPacketOfType(
 std::unique_ptr<Cn105Packet> Controller::CreateInfoAck(InfoPacket info) {
   switch (info.type()) {
     case InfoType::kSettings:
-      return InfoAckPacket::Create(shared_data_.GetHvacSettings());
+      return InfoAckPacket::Create(shared_data_.GetStoredHvacSettings());
 
       // TODO(awong): Implement.
     case InfoType::kExtendedSettings:
@@ -303,7 +303,7 @@ std::unique_ptr<Cn105Packet> Controller::CreateInfoAck(InfoPacket info) {
       // Unknown packet type. Ack with a status.
       //
       // TODO(awong): Make this actaully a status ack.
-      return InfoAckPacket::Create(shared_data_.GetHvacSettings());
+      return InfoAckPacket::Create(shared_data_.GetStoredHvacSettings());
   }
 }
 

@@ -72,7 +72,7 @@ class Controller {
 
   // Queries/Pushes settings over the |hvac_control_| channel.
   std::optional<HvacSettings> QuerySettings();
-  bool PushSettings(const HvacSettings& settings);
+  bool PushSettings(const StoredHvacSettings& settings);
 
   // Queries/Pushes extended settings over the |hvac_control_| channel.
   std::optional<ExtendedSettings> QueryExtendedSettings();
@@ -110,8 +110,8 @@ class Controller {
   // Ensures locked access to shared fields.
   class SharedData {
    public:
-    HvacSettings GetHvacSettings() const;
-    void SetHvacSettings(const HvacSettings& hvac_settings);
+    StoredHvacSettings GetStoredHvacSettings() const;
+    void SetStoredHvacSettings(const StoredHvacSettings& hvac_settings);
     ExtendedSettings GetExtendedSettings() const;
     void SetExtendedSettings(const ExtendedSettings& extended_settings);
 
@@ -119,7 +119,7 @@ class Controller {
     mutable esp_cxx::Mutex mutex_;
 
     // Current settings to push to the hvac controller.
-    HvacSettings hvac_settings_;
+    StoredHvacSettings hvac_settings_;
 
     // Current extended settings to push to the hvac controller.
     ExtendedSettings extended_settings_;

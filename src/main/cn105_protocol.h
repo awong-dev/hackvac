@@ -75,11 +75,7 @@ class UpdatePacket {
     return std::move(packet);
   };
 
-  void ApplyUpdate(StoredHvacSettings* settings) {
-    HvacSettings received_settings(packet_->data());
-    // TODO(awong): copy/assignment needs to be fixed for StoredHvacSettings!
-    settings->MergeUpdate(received_settings);
-  }
+  HvacSettings settings() { return HvacSettings(packet_->data()); }
 
  private:
   // Not owned.
@@ -149,7 +145,11 @@ class InfoAckPacket {
   }
 
   std::optional<ExtendedSettings> extended_settings() const {
-    return {};
+    if (type() != CommandType::kExtendedSettings) {
+      return {};
+    }
+
+    return ExtendedSettings(packet_->data());
   }
 
  private:

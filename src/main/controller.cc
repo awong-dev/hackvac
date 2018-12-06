@@ -141,7 +141,7 @@ void Controller::OnThermostatPacket(
             // TODO(awong): Extract into a process function like CreateInfoAck().
             UpdatePacket update(thermostat_packet.get());
             StoredHvacSettings new_settings = shared_data_.GetStoredHvacSettings();
-            update.ApplyUpdate(&new_settings);
+            new_settings.MergeUpdate(update.settings());
             shared_data_.SetStoredHvacSettings(new_settings);
             ESP_LOGI(kTag, "Sending UpdateACK");
             thermostat_.EnqueuePacket(UpdateAckPacket::Create());

@@ -77,7 +77,7 @@ class Controller {
 
   // Queries/Pushes extended settings over the |hvac_control_| channel.
   std::optional<ExtendedSettings> QueryExtendedSettings();
-  bool PushExtendedSettings(const ExtendedSettings& extended_settings);
+  bool PushExtendedSettings(const StoredExtendedSettings& extended_settings);
 
   // Reads and discards packets from |hvac_packet_rx_queue_| until a packet
   // of |type| found.
@@ -113,8 +113,8 @@ class Controller {
    public:
     StoredHvacSettings GetStoredHvacSettings() const;
     void SetStoredHvacSettings(const StoredHvacSettings& hvac_settings);
-    ExtendedSettings GetExtendedSettings() const;
-    void SetExtendedSettings(const ExtendedSettings& extended_settings);
+    StoredExtendedSettings GetExtendedSettings() const;
+    void SetExtendedSettings(const StoredExtendedSettings& extended_settings);
 
    private:
     mutable esp_cxx::Mutex mutex_;
@@ -123,7 +123,7 @@ class Controller {
     StoredHvacSettings hvac_settings_;
 
     // Current extended settings to push to the hvac controller.
-    ExtendedSettings extended_settings_;
+    StoredExtendedSettings extended_settings_;
   };
 
   // Hvac state being accessed by multiple tasks.

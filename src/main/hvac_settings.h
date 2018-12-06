@@ -33,25 +33,6 @@ enum class Mode : uint8_t {
   kIseeAuto = kAuto + 0x08,
 };
 
-enum class TargetTemp : uint8_t {
-  kMaxTemp = 0x00,
-  k30C = 0x01,
-  k29C = 0x02,
-  k28C = 0x03,
-  k27C = 0x04,
-  k26C = 0x05,
-  k25C = 0x06,
-  k24C = 0x07,
-  k23C = 0x08,
-  k22C = 0x09,
-  k21C = 0x0A,
-  k20C = 0x0B,
-  k19C = 0x0C,
-  k18C = 0x0D,
-  k17C = 0x0E,
-  kMinTemp = 0x0F,
-};
-
 enum class Fan : uint8_t {
   kAuto = 0x00,
   kQuiet = 0x01,
@@ -172,16 +153,20 @@ class HalfDegreeTemp {
 };
 
 namespace internal {
-enum class UpdateBitfield : uint8_t {
+enum class SettingsBitfield : uint8_t {
   kPowerFlag = 0x01,
   kModeFlag = 0x02,
   kTempFlag = 0x04,
   kFanFlag = 0x08,
   kVaneFlag = 0x10,
-  kWideVaneFlag,
+  kWideVaneFlag,  // 0x01 of bitfield byte #2
 };
 
-template <UpdateBitfield field>
+enum class ExtendedSettingsBitfield : uint8_t {
+  kRoomTempFlag = 0x01,
+};
+
+template <SettingsBitfield field>
 struct Bitfield {
   static bool Has(const uint8_t* data_ptr) {
       return data_ptr[1] & static_cast<uint8_t>(field);
@@ -195,7 +180,7 @@ struct Bitfield {
 };
 
 template <>
-struct Bitfield<UpdateBitfield::kWideVaneFlag> {
+struct Bitfield<SettingsBitfield::kWideVaneFlag> {
   static bool Has(const uint8_t* data_ptr) { return data_ptr[2] & 0x1; }
   static void Set(uint8_t* data_ptr) { data_ptr[2] |= 0x1; }
   static void Unset(uint8_t* data_ptr) { data_ptr[2] &= 0x1; }
@@ -203,23 +188,23 @@ struct Bitfield<UpdateBitfield::kWideVaneFlag> {
 
 template <typename T> struct ExtractConfig;
 template <> struct ExtractConfig<Power> {
-  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kPowerFlag;
+  constexpr static SettingsBitfield kBitfield = SettingsBitfield::kPowerFlag;
   constexpr static int kDataPos = 3;
 };
 template <> struct ExtractConfig<Mode> {
-  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kModeFlag;
+  constexpr static SettingsBitfield kBitfield = SettingsBitfield::kModeFlag;
   constexpr static int kDataPos = 4;
 };
 template <> struct ExtractConfig<Fan> {
-  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kFanFlag;
+  constexpr static SettingsBitfield kBitfield = SettingsBitfield::kFanFlag;
   constexpr static int kDataPos = 6;
 };
 template <> struct ExtractConfig<Vane> {
-  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kVaneFlag;
+  constexpr static SettingsBitfield kBitfield = SettingsBitfield::kVaneFlag;
   constexpr static int kDataPos = 7;
 };
 template <> struct ExtractConfig<WideVane> {
-  constexpr static UpdateBitfield kBitfield = UpdateBitfield::kWideVaneFlag;
+  constexpr static SettingsBitfield kBitfield = SettingsBitfield::kWideVaneFlag;
   constexpr static int kDataPos = 10;
 };
 }  // namespace internal
@@ -260,7 +245,7 @@ class HvacSettings {
 
   template <typename T>
   void Set(std::optional<T> setting) const {
-    constexpr UpdateBitfield field = ExtractConfig<T>::kBitfield;
+    constexpr SettingsBitfield field = ExtractConfig<T>::kBitfield;
     if (setting) {
       Bitfield<field>::Set(data_ptr_);
       data_ptr_[ExtractConfig<T>::kDataPos] = static_cast<uint8_t>(setting);
@@ -274,8 +259,8 @@ class HvacSettings {
   void SetTargetTemp(std::optional<HalfDegreeTemp> target_temp);
 
  private:
-  using UpdateBitfield = internal::UpdateBitfield;
-  template <UpdateBitfield field> using Bitfield = internal::Bitfield<field>;
+  using SettingsBitfield = internal::SettingsBitfield;
+  template <SettingsBitfield field> using Bitfield = internal::Bitfield<field>;
   template <typename T> using ExtractConfig = internal::ExtractConfig<T>;
 
   uint8_t* data_ptr_ = nullptr;
@@ -307,13 +292,27 @@ class StoredHvacSettings : public HvacSettings {
 //            room temp is first byte after.
 //            NOTE: MHK1 sends 0x80 for data if setting is nonsense (negative)
 //                  yielding 0x00 on byte0 bitflag.
-struct ExtendedSettings {
+class ExtendedSettings {
  public:
+  static const HalfDegreeTemp kMaxRoomTemp;
+  static const HalfDegreeTemp kMinRoomTemp;
+
+  explicit ExtendedSettings(uint8_t* raw_data) : data_ptr_(raw_data) {}
+
+  std::optional<HalfDegreeTemp> GetRoomTemp() const;
+
+ private:
+  uint8_t* data_ptr_ = nullptr;
+};
+
+class StoredExtendedSettings : public ExtendedSettings {
+ public:
+  StoredExtendedSettings() : ExtendedSettings(data_.data()) {
+  }
+
   const std::array<uint8_t, 16>& encoded_bytes() const { return data_; }
 
-  RoomTemp room_temp;
  private:
-  uint8_t* ptr_ = nullptr;
   std::array<uint8_t, 16> data_ = {};
 };
 

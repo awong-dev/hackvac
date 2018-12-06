@@ -69,7 +69,7 @@ class UpdatePacket {
     return std::move(packet);
   };
 
-  static std::unique_ptr<Cn105Packet> Create(const ExtendedSettings& extended_settings) {
+  static std::unique_ptr<Cn105Packet> Create(const StoredExtendedSettings& extended_settings) {
     auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdate, extended_settings.encoded_bytes());
     packet->data()[0] = static_cast<uint8_t>(CommandType::kSetExtendedSettings);
     return std::move(packet);

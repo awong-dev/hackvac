@@ -40,18 +40,18 @@ void Controller::SharedData::SetStoredHvacSettings(const StoredHvacSettings& hva
            static_cast<int32_t>(hvac_settings.Get<WideVane>().value()));
 }
 
-ExtendedSettings Controller::SharedData::GetExtendedSettings() const {
+StoredExtendedSettings Controller::SharedData::GetExtendedSettings() const {
   esp_cxx::AutoMutex lock_(&mutex_);
   return extended_settings_;
 }
 
-void Controller::SharedData::SetExtendedSettings(const ExtendedSettings& extended_settings) {
+void Controller::SharedData::SetExtendedSettings(const StoredExtendedSettings& extended_settings) {
   {
     esp_cxx::AutoMutex lock_(&mutex_);
     extended_settings_ = extended_settings;
   }
   ESP_LOGI(kTag, "extended settings: rt:%d",
-           static_cast<int32_t>(extended_settings.room_temp));
+           static_cast<int32_t>(extended_settings.GetRoomTemp().value().whole_degree()));
 }
 
 Controller::Controller()
@@ -201,7 +201,7 @@ void Controller::ControlTaskRunloop() {
     std::optional<ExtendedSettings> hvac_extended_settings = QueryExtendedSettings();
     at_least_one_suceeded |= !!hvac_extended_settings;
     StoredHvacSettings current_settings = shared_data_.GetStoredHvacSettings();
-    ExtendedSettings current_extended_settings = shared_data_.GetExtendedSettings();
+    StoredExtendedSettings current_extended_settings = shared_data_.GetExtendedSettings();
 
     // TODO(awong): Log the diff from the current state.
 
@@ -264,7 +264,7 @@ std::optional<ExtendedSettings> Controller::QueryExtendedSettings() {
 }
 
 bool Controller::PushExtendedSettings(
-    const ExtendedSettings& extended_settings) {
+    const StoredExtendedSettings& extended_settings) {
   hvac_control_.EnqueuePacket(UpdatePacket::Create(extended_settings));
   std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kUpdateAck);
   UpdateAckPacket update_ack(raw_ack.get());

@@ -123,14 +123,6 @@ enum class RoomTemp : uint8_t {
   k41C = 0x1E,
 };
 
-enum class UpdateType : uint8_t {
-  // Used for power, mode, target temp, fan, vane, direction.
-  kNormalSettings = 0x01,
-
-  // Used for room temperature.
-  kExtendedSettings = 0x07,
-};
-
 // TODO(awong):
 //   I'm betting this is settings commands types that are effectively a common
 //   enum used by both Info/Update. Note that in update, there is a similar format

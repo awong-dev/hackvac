@@ -96,7 +96,7 @@ class UpdateAckPacket {
     return std::make_unique<Cn105Packet>(PacketType::kUpdateAck, kBlank16BytePacket);
   }
 
-  UpdateType type() const { return static_cast<UpdateType>(packet_->data()[0]); }
+  CommandType type() const { return static_cast<CommandType>(packet_->data()[0]); }
 
   bool IsValid() const {
     return packet_ && !packet_->IsJunk() && packet_->IsComplete() && packet_->IsChecksumValid();
@@ -145,8 +145,6 @@ class InfoAckPacket {
       return {};
     }
 
-    // TODO(awong): I assume bitfields 1 and 2 are the mirror of the update packet
-    // for what settings have been returned.
     return HvacSettings(packet_->data());
   }
 

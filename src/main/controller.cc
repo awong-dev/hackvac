@@ -246,7 +246,7 @@ bool Controller::PushSettings(const StoredHvacSettings& settings) {
   std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kUpdateAck);
   UpdateAckPacket update_ack(raw_ack.get());
 
-  return update_ack.IsValid() && update_ack.type() == UpdateType::kNormalSettings;
+  return update_ack.IsValid() && update_ack.type() == CommandType::kSettings;
 }
 
 // Queries/Pushes extended settings over the |hvac_control_| channel.
@@ -269,7 +269,7 @@ bool Controller::PushExtendedSettings(
   std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kUpdateAck);
   UpdateAckPacket update_ack(raw_ack.get());
 
-  return update_ack.IsValid() && update_ack.type() == UpdateType::kExtendedSettings;
+  return update_ack.IsValid() && update_ack.type() == CommandType::kExtendedSettings;
 }
 
 std::unique_ptr<Cn105Packet> Controller::AwaitPacketOfType(

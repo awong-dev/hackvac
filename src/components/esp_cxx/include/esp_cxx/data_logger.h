@@ -1,6 +1,8 @@
 #ifndef ESPCXX_DATA_LOGGER_H_
 #define ESPCXX_DATA_LOGGER_H_
 
+#include "task.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_task.h"

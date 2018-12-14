@@ -7,22 +7,22 @@ namespace esp_cxx {
 
 // RAII class for opening up an NVS handle.
 class NvsHandle {
-  public:
-    NvsHandle(const char* name, nvs_open_mode mode);
-    ~NvsHandle();
+ public:
+  NvsHandle(const char* name, nvs_open_mode mode);
+  ~NvsHandle();
 
-    NvsHandle(NvsHandle&& other);
-    NvsHandle& operator=(NvsHandle&&);
-    static NvsHandle OpenWifiConfig(nvs_open_mode mode);
-    static NvsHandle OpenOtaState(nvs_open_mode mode);
+  NvsHandle(NvsHandle&& other);
+  NvsHandle& operator=(NvsHandle&&);
+  static NvsHandle OpenWifiConfig(nvs_open_mode mode);
+  static NvsHandle OpenOtaState(nvs_open_mode mode);
 
-    nvs_handle get() const { return handle_; }
+  nvs_handle get() const { return handle_; }
 
-  private:
-    nvs_handle handle_;
+ private:
+  nvs_handle handle_;
 
-    NvsHandle(NvsHandle&) = delete;
-    void operator=(NvsHandle&) = delete;
+  NvsHandle(NvsHandle&) = delete;
+  void operator=(NvsHandle&) = delete;
 };
 
 }  // namespace esp_cxx

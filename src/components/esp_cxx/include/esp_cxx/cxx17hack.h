@@ -11,7 +11,7 @@
 // for this specific case. Yay for having too many C++ porting scars. Thanks
 // Chrome.
 
-#if __GNUC__ < 8
+#if !defined(__clang__) && defined(__GNUC__) && __GNUC__ < 8
 
 #include <experimental/optional>
 #include <experimental/string_view>
@@ -20,6 +20,11 @@ namespace std {
 template <typename T> using optional = experimental::optional<T>;
 using string_view = experimental::string_view;
 }  // namespace std
+
+#else
+
+#include <optional>
+#include <string_view>
 
 #endif
 

@@ -30,9 +30,21 @@ class Task {
   static constexpr PriorityType kDefaultPrio = ESP_TASK_MAIN_PRIO;
 #endif
 
+  Task() = default;
+  Task(Task&& other)
+    : task_handle_(other.task_handle_) {
+      other.task_handle_ = {};
+  }
+  Task& operator=(Task&& rhs) {
+    task_handle_ = rhs.task_handle_;
+    rhs.task_handle_ = {};
+    return *this;
+  }
+
   // Creaes and starts the task.
   Task(void (*func)(void*),
        void* param,
+       const char* name,
        unsigned short stackdepth = kDefaultStackDepth,
        PriorityType priority = kDefaultPrio);
 
@@ -43,10 +55,11 @@ class Task {
   }
 
   template <typename T, void (T::*method)(void)>
-  Task(T* obj,
-       unsigned short stackdepth = kDefaultStackDepth,
-       PriorityType priority = kDefaultPrio)
-    : Task(&MethodThunk<T, method>, obj, stackdepth, priority) {
+  static Task Create(T* obj,
+                     const char* name,
+                     unsigned short stackdepth = kDefaultStackDepth,
+                     PriorityType priority = kDefaultPrio) {
+    return Task(&MethodThunk<T, method>, obj, name, stackdepth, priority);
   }
 
   // Terminates the task.
@@ -55,8 +68,8 @@ class Task {
   // Notifies the task.
   void Notify();
 
-  // Blocks until a notification is received.
-  void Wait();
+  // Blocks current task until a notification is received.
+  static void CurrentTaskWait();
 
  private:
   TaskHandle task_handle_{};

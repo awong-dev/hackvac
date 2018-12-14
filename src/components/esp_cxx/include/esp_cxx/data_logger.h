@@ -1,12 +1,7 @@
 #ifndef ESPCXX_DATA_LOGGER_H_
 #define ESPCXX_DATA_LOGGER_H_
 
-#include "task.h"
-
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_task.h"
-
+#include "esp_cxx/task.h"
 #include "esp_cxx/data_buffer.h"
 
 namespace esp_cxx {
@@ -26,28 +21,22 @@ class DataLogger {
   explicit DataLogger(const char* name) : name_(name) {}
 
   void Init() {
-    xTaskCreate(&LogTaskThunk, name_, XT_STACK_EXTRA_CLIB, this,
-                ESP_TASK_MAIN_PRIO, &task_handle_);
+    task_ = Task::Create<DataLogger, &DataLogger::LogTaskRunLoop>(this, name_);
   }
 
   void Log(T data) {
     data_log_.Put(std::move(data));
-    xTaskNotify(task_handle_, 0, eNoAction);
+    task_.Notify();
   }
 
  private:
-  static void LogTaskThunk(void* parameters) {
-    DataLogger* self = static_cast<DataLogger*>(parameters);
-    self->LogTaskRunLoop();
-  }
-
   void LogTaskRunLoop() {
     for (;;) {
       T data;
       while (data_log_.Get(&data)) {
         LogFunc(std::move(data));
       }
-      xTaskNotifyWait(0x00, ULONG_MAX, NULL, portMAX_DELAY);
+      Task::CurrentTaskWait();
     }
   }
 
@@ -55,7 +44,7 @@ class DataLogger {
   const char* name_;
 
   // Handle of logging task.
-  TaskHandle_t task_handle_ = nullptr;
+  Task task_;
 
   // Ring buffer for data to log.
   DataBuffer<T, size> data_log_;

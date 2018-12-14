@@ -9,7 +9,6 @@
 #include "esp_task.h"
 #endif
 
-
 namespace esp_cxx {
 
 // RAII class for opening up an NVS handle.
@@ -18,7 +17,7 @@ class Task {
 #if MOCK_ESP_IDF
   using PriorityType = int;
   using TaskHandle = pthread_t;
-  static constexpr unsigned short kDefaultStackDepth = XT_STACK_EXTRA_CLIB;
+  static constexpr unsigned short kDefaultStackSize = 1024;
 
   // 1 is low and 99 is max for Linux SCHED_FIFO which is closes to
   // FreeRTOS's static priority based scheduling.
@@ -26,7 +25,7 @@ class Task {
 #else
   using PriorityType = UBaseType_t;
   using TaskHandle = TaskHandle_t;
-  static constexpr unsigned short kDefaultStackDepth = XT_STACK_EXTRA_CLIB;
+  static constexpr unsigned short kDefaultStackSize = XT_STACK_EXTRA_CLIB;
   static constexpr PriorityType kDefaultPrio = ESP_TASK_MAIN_PRIO;
 #endif
 
@@ -45,7 +44,7 @@ class Task {
   Task(void (*func)(void*),
        void* param,
        const char* name,
-       unsigned short stackdepth = kDefaultStackDepth,
+       unsigned short stackdepth = kDefaultStackSize,
        PriorityType priority = kDefaultPrio);
 
   // Auto-generate a thunk for object methods.
@@ -57,7 +56,7 @@ class Task {
   template <typename T, void (T::*method)(void)>
   static Task Create(T* obj,
                      const char* name,
-                     unsigned short stackdepth = kDefaultStackDepth,
+                     unsigned short stackdepth = kDefaultStackSize,
                      PriorityType priority = kDefaultPrio) {
     return Task(&MethodThunk<T, method>, obj, name, stackdepth, priority);
   }

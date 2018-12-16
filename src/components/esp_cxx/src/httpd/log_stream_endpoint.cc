@@ -2,7 +2,6 @@
 
 #include "esp_cxx/httpd/util.h"
 #include "esp_cxx/logging.h"
-#include "esp_log.h"
 
 namespace esp_cxx {
 

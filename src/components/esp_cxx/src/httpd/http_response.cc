@@ -4,7 +4,6 @@
 #include "esp_cxx/logging.h"
 
 #include "mongoose.h"
-#include "esp_log.h"
 
 /*
 void SendResultJson(mg_connection* nc, int status, const char* msg) {
@@ -55,7 +54,7 @@ void HttpResponse::SendError(int status_code, const char* text) {
   mg_http_send_error(connection_, status_code, text);
 }
 
-void HttpResponse::SendMore(std::experimental::string_view data) {
+void HttpResponse::SendMore(std::string_view data) {
   if (!HasSentHeaders()) {
     ESP_LOGW(kEspCxxTag, "SendMore() before headers!");
     return;

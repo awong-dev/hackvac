@@ -2,8 +2,6 @@
 
 #include "esp_cxx/logging.h"
 
-#include "esp_log.h"
-
 namespace esp_cxx {
 
 namespace {

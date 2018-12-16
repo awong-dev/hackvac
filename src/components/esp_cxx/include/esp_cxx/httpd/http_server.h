@@ -7,6 +7,7 @@
 #include "esp_cxx/httpd/http_response.h"
 #include "esp_cxx/httpd/http_multipart.h"
 #include "esp_cxx/httpd/websocket.h"
+#include "esp_cxx/task.h"
 
 namespace esp_cxx {
 
@@ -73,9 +74,6 @@ class HttpServer {
   }
 
  private:
-  // Thunk for executing the actual run loop.
-  static void EventPumpThunk(void* parameters);
-
   // Pumps events for the http server.
   void EventPumpRunLoop();
 
@@ -102,7 +100,7 @@ class HttpServer {
   mg_connection* connection_;
 
   // Handle of event pump task.
-  TaskHandle_t pump_task_ = nullptr;
+  Task pump_task_;
 };
 
 }  // namespace esp_cxx

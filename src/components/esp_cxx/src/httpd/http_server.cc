@@ -2,8 +2,6 @@
 
 #include "esp_cxx/logging.h"
 
-#include "esp_log.h"
-
 namespace esp_cxx {
 
 void HttpServer::Endpoint::OnHttpEventThunk(mg_connection *new_connection, int event,
@@ -82,9 +80,7 @@ HttpServer::HttpServer(const char* name, const char* port,
 }
 
 HttpServer::~HttpServer() {
-  if (pump_task_) {
-    vTaskDelete(pump_task_);
-  }
+  // TODO(awong): Destroya and join the pump task here.
   mg_mgr_free(&event_manager_);
 }
 
@@ -94,15 +90,11 @@ void HttpServer::EnableWebsockets() {
 
 void HttpServer::Start() {
   // TODO(awong): Figure out the priority.
-  xTaskCreate(&HttpServer::EventPumpThunk, name_, XT_STACK_EXTRA_CLIB, this, 2, &pump_task_);
+  pump_task_ = Task::Create<HttpServer, &HttpServer::EventPumpRunLoop>(this, name_);
 }
 
 void HttpServer::RegisterEndpoint(const char* path_pattern, Endpoint* endpoint) {
   mg_register_http_endpoint(connection_, path_pattern, &Endpoint::OnHttpEventThunk, endpoint);
-}
-
-void HttpServer::EventPumpThunk(void* parameters) {
-  static_cast<HttpServer*>(parameters)->EventPumpRunLoop();
 }
 
 void HttpServer::EventPumpRunLoop() {
@@ -120,7 +112,8 @@ void HttpServer::DefaultHandlerThunk(struct mg_connection *nc,
     case MG_EV_HTTP_REQUEST:
     case MG_EV_HTTP_MULTIPART_REQUEST: {
       http_message* message = static_cast<http_message*>(event_data);
-      ESP_LOGI(kEspCxxTag, "HTTP received: %.*s for %.*s", message->method.len, message->method.p, message->uri.len, message->uri.p);
+      ESP_LOGI(kEspCxxTag, "HTTP received: %.*s for %.*s",
+               message->method.len, message->method.p, message->uri.len, message->uri.p);
       if (self->resp404_html_.empty()) {
         mg_http_send_error(nc, 404, nullptr);
       } else {

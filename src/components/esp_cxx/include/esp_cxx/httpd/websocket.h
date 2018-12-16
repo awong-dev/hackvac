@@ -3,8 +3,8 @@
 
 #include "esp_cxx/cxx17hack.h"
 #include "esp_cxx/httpd/util.h"
+#include "esp_cxx/task.h"
 
-#include "esp_task.h"
 #include "mongoose.h"
 
 namespace esp_cxx {
@@ -62,7 +62,7 @@ class WebsocketChannel {
   void OnWsEvent(mg_connection *new_connection, int event, websocket_message *ev_data);
   static void OnWsEventThunk(mg_connection *new_connection, int event,
                              void *ev_data, void *user_data);
-  static void EventPumpThunk(void* parameters);
+  void EventPumpRunLoop() {}
 
   // Name for pump task.
   const char* name_;
@@ -78,7 +78,7 @@ class WebsocketChannel {
   mg_connection* current_connection_ = nullptr;
 
   // Handle of event pump task.
-  TaskHandle_t pump_task_ = nullptr;
+  Task pump_task_;
 };
 
 }  // namespace esp_cxx

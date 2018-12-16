@@ -1,0 +1,6 @@
+mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
+component_include_dir := $(dir $(mkfile_path))include
+
+host_test: ${COMPONENT_PATH}/host_test/*.cc ${COMPONENT_PATH}/src/task.cc
+	c++ -pthreads -D_POSIX_THREADS=1 -DMOCK_ESP_IDF=1 -std=c++17 -Wno-unknown-attributes -I$(component_include_dir) ${CPPFLAGS} $^ -o ${BUILD_DIR_BASE}/host_$@
+

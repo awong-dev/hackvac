@@ -4,16 +4,16 @@
 namespace esp_cxx {
 constexpr char kEspCxxTag[] = "espcxx";
 
-#if MOCK_ESP_IDF
+#if FAKE_ESP_IDF
 
 #include <cstdio>
 #define ESP_LOGI(tag, fmt, args...) fprintf(stderr, "I: %s: " fmt, tag, ##args)
 #define ESP_LOGW(tag, fmt, args...) fprintf(stderr, "W: %s: " fmt, tag, ##args)
 #define ESP_LOGE(tag, fmt, args...) fprintf(stderr, "E: %s: " fmt, tag, ##args)
 
-#else
+#else  // FAKE_ESP_IDF
 #include "esp_log.h"
-#endif
+#endif  // FAKE_ESP_IDF
 
 }  // namespace esp_cxx
 

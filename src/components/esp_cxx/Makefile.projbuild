@@ -2,6 +2,23 @@ mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
 component_include_dir := $(dir $(mkfile_path))include
 mongoose_path := $(abspath $(dir $(mkfile_path))../mongoose)
 
-host_test: ${COMPONENT_PATH}/host_test/*.cc ${COMPONENT_PATH}/src/task.cc ${COMPONENT_PATH}/src/httpd/*.cc
-	c++ -Wno-format -pthreads -D_POSIX_THREADS=1 -DMOCK_ESP_IDF=1 -std=c++17 -Wno-unknown-attributes -I$(component_include_dir) -I$(mongoose_path)/include ${CPPFLAGS} $^ -o ${BUILD_DIR_BASE}/host_$@
+ifdef HOST_TEST
+# TODO(awong): That's odd. We have to override here?
+CC := gcc
+CXX := g++
+HOST_EXCLUDED_CLFAGS := -fstrict-volatile-bitfields -mlongcalls -Wno-error=unused-but-set-variable
+# TODO(awong): Wno-format is unfortnate.
+EXTRA_CFLAGS := -I$(component_include_dir) -I$(mongoose_path)/include -DFAKE_ESP_IDF=1 -Wno-format -I$(IDF_PATH)/components/mbedtls/include -I$(IDF_PATH)/components/mbedtls/port/include -I${BUILD_DIR_BASE}/include
+CXXFLAGS := $(filter-out ${HOST_EXCLUDED_CLFAGS},$(CXXFLAGS)) $(EXTRA_CFLAGS) -std=c++17 
+CFLAGS := $(filter-out ${HOST_EXCLUDED_CLFAGS},$(CFLAGS)) $(EXTRA_CFLAGS)
 
+ESP_CXX_FILES := $(wildcard ${COMPONENT_PATH}/host_test/*.cc) ${COMPONENT_PATH}/src/task.cc $(wildcard ${COMPONENT_PATH}/src/httpd/*.cc) 
+MBEDTLS_FILES := $(wildcard $(IDF_PATH)/components/mbedtls/library/*.c)
+
+ESP_CXX_OBJS := $(ESP_CXX_FILES:.cc=.o) 
+
+host_test: $(ESP_CXX_OBJS) $(MBEDTLS_FILES:.c=.o)
+
+#	c++ -Wno-format -pthreads -D_POSIX_THREADS=1 -DFAKE_ESP_IDF=1 -std=c++17 -Wno-unknown-attributes -I$(component_include_dir) -I$(mongoose_path)/include -I$(IDF_PATH)/components/mbedtls/include -I$(IDF_PATH)/components/mbedtls/port/include -I${BUILD_DIR_BASE}/include ${CPPFLAGS} $^ -o ${BUILD_DIR_BASE}/host_$@
+
+endif

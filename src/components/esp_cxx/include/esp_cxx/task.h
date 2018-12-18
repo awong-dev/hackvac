@@ -1,20 +1,20 @@
 #ifndef TASK_H_
 #define TASK_H_
 
-#if MOCK_ESP_IDF
+#if FAKE_ESP_IDF
 #include <pthread.h>
-#else
+#else  // FAKE_ESP_IDF
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_task.h"
-#endif
+#endif  // FAKE_ESP_IDF
 
 namespace esp_cxx {
 
 // RAII class for opening up an NVS handle.
 class Task {
  public:
-#if MOCK_ESP_IDF
+#if FAKE_ESP_IDF
   using PriorityType = int;
   using TaskHandle = pthread_t;
   static constexpr unsigned short kDefaultStackSize = 1024;
@@ -22,12 +22,12 @@ class Task {
   // 1 is low and 99 is max for Linux SCHED_FIFO which is closes to
   // FreeRTOS's static priority based scheduling.
   static constexpr PriorityType kDefaultPrio = 1;
-#else
+#else  // FAKE_ESP_IDF
   using PriorityType = UBaseType_t;
   using TaskHandle = TaskHandle_t;
   static constexpr unsigned short kDefaultStackSize = XT_STACK_EXTRA_CLIB;
   static constexpr PriorityType kDefaultPrio = ESP_TASK_MAIN_PRIO;
-#endif
+#endif  // FAKE_ESP_IDF
 
   Task() = default;
   Task(Task&& other)

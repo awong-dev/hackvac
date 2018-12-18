@@ -62,7 +62,9 @@ class WebsocketChannel {
   void OnWsEvent(mg_connection *new_connection, int event, websocket_message *ev_data);
   static void OnWsEventThunk(mg_connection *new_connection, int event,
                              void *ev_data, void *user_data);
-  void EventPumpRunLoop() {}
+  void EventPumpRunLoop();
+
+  void (*on_frame_cb_)(WebsocketFrame frame) = nullptr;
 
   // Name for pump task.
   const char* name_;
@@ -75,7 +77,7 @@ class WebsocketChannel {
 
   // Keeps track of the current connection. Allows for sending. If null, then
   // server should reconnect.
-  mg_connection* current_connection_ = nullptr;
+  mg_connection* connection_ = nullptr;
 
   // Handle of event pump task.
   Task pump_task_;

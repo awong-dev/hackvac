@@ -2,6 +2,7 @@
 
 #include "esp_cxx/cxx17hack.h"
 #include "esp_cxx/logging.h"
+#if 0
 #include "esp_cxx/wifi.h"
 
 #include "driver/gpio.h"
@@ -198,3 +199,4 @@ void StandardEndpoints::LedOffEndpoint(HttpRequest request,
 
 }  // namespace esp_cxx
 
+#endif

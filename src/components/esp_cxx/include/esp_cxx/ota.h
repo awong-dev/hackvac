@@ -5,7 +5,14 @@
 
 #include "esp_cxx/cxx17hack.h"
 #include "mbedtls/md5.h"
+
+#if FAKE_ESP_IDF
+typedef void* esp_ota_handle_t;
+typedef void* esp_partition_t;
+constexpr size_t OTA_SIZE_UNKNOWN = 0;
+#else  // FAKE_ESP_IDF
 #include "esp_ota_ops.h"
+#endif
 
 namespace esp_cxx {
  

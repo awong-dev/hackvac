@@ -3,7 +3,7 @@
 #include "esp_cxx/task.h"
 
 namespace {
-#if MOCK_ESP_IDF
+#if FAKE_ESP_IDF
 void KillSignalHandler(int junk) {
   pthread_exit(0);
 }
@@ -29,7 +29,7 @@ void* PThreadWrapperFunc(void* param) {
   return nullptr;
 }
 
-#endif
+#endif  // FAKE_ESP_IDF
 
 }  // namespace
 
@@ -37,7 +37,7 @@ namespace esp_cxx {
 
 Task::Task(void (*func)(void*), void* param, const char* name,
            unsigned short stack_size, PriorityType priority) {
-#if MOCK_ESP_IDF
+#if FAKE_ESP_IDF
   pthread_attr_t attr;
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
@@ -52,35 +52,35 @@ Task::Task(void (*func)(void*), void* param, const char* name,
   pthread_create(&task_handle_, &attr, &PThreadWrapperFunc, new PthreadState(func, param));
 
   pthread_attr_destroy(&attr);
-#else
+#else  // FAKE_ESP_IDF
   xTaskCreate(func, name, stack_size, param, priority, &task_handle_);
-#endif
+#endif  // FAKE_ESP_IDF
 }
 
 Task::~Task() {
   if (task_handle_) {
-#if MOCK_ESP_IDF
+#if FAKE_ESP_IDF
     pthread_kill(task_handle_, SIGUSR1);
-#else
+#else  // FAKE_ESP_IDF
     vTaskDelete(task_handle_);
-#endif
+#endif  // FAKE_ESP_IDF
   }
 }
 
 void Task::Notify() {
-#if MOCK_ESP_IDF
+#if FAKE_ESP_IDF
   // TODO(awong): Signal!
-#else
+#else  // FAKE_ESP_IDF
   xTaskNotify(task_handle_, 0, eNoAction);
-#endif
+#endif  // FAKE_ESP_IDF
 }
 
 void Task::CurrentTaskWait() {
-#if MOCK_ESP_IDF
+#if FAKE_ESP_IDF
   // TODO(awong): Sleep!
-#else
+#else  // FAKE_ESP_IDF
   xTaskNotifyWait(0x00, ULONG_MAX, NULL, portMAX_DELAY);
-#endif
+#endif  // FAKE_ESP_IDF
 }
 
 }  // namespace esp_cxx

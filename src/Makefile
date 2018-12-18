@@ -5,5 +5,12 @@
 
 PROJECT_NAME := hackvac
 
+ifdef HOST_TEST
+CC := gcc
+CXX := g++
+BUILD_DIR_BASE=host_build
+CONFIG_TOOLPREFIX=
+endif
+
 include $(IDF_PATH)/make/project.mk
 

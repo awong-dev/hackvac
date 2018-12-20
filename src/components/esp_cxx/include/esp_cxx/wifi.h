@@ -3,30 +3,45 @@
 
 #include "esp_cxx/cxx17hack.h"
 
-#include "esp_wifi.h"
-
 namespace esp_cxx {
 
-#define fldsiz(name, field) (sizeof(((name *)0)->field))
-constexpr size_t kSsidBytes = fldsiz(wifi_config_t, sta.ssid);
-constexpr size_t kPasswordBytes = fldsiz(wifi_config_t, sta.password);
-#undef fldsize
+class Wifi {
+ public:
+  Wifi();
+  ~Wifi();
 
-bool LoadConfigFromNvs(
-    const char fallback_ssid[], size_t fallback_ssid_len,
-    const char fallback_password[], size_t fallback_password_len,
-    wifi_config_t *wifi_config);
+  static constexpr size_t kSsidBytes = 32;
+  static constexpr size_t kPasswordBytes = 64;
+  
+  // Set and get the ssid/password from Nvs.
+  static std::optional<std::string> GetSsid();
+  static std::optional<std::string> GetPassword();
 
-// Set and get the ssid/password from Nvs.
-std::optional<std::string> GetWifiSsid();
-std::optional<std::string> GetWifiPassword();
+  // The passed in string_views MUST be null terminated and smaller than
+  // kSsidBytes and kPasswordBytes respecitvely.
+  static void SetSsid(const std::string& ssid);
+  static void SetPassword(const std::string& password);
 
-// The passed in string_views MUST be null terminated and smaller than
-// kSsidBytes and kPasswordBytes respecitvely.
-void SetWifiSsid(const std::string& ssid);
-void SetWifiPassword(const std::string& password);
+  // Uses the loaded Ssid and Password to connect to an AP.
+  // Returns false if those values are not set or some unexpected
+  // error occurs.
+  //
+  // Will attempt to reconnect if network is disconencted.
+  //
+  // This is mutually exclusive with CreateSetupNetwork().
+  bool ConnectToAP();
 
-void WifiConnect(const wifi_config_t& wifi_config, bool is_station);
+  // Creates a new ssid network that clients can connect to for
+  // configurating this device.
+  //
+  // This is mutually exclusive with ConnectToAP().
+  bool CreateSetupNetwork(const std::string& setup_ssid,
+                          const std::string& setup_password);
+
+  // Stops wifi system after either a ConnectToAP() or CreateSetupNetwork()
+  // call.
+  void Disconnect();
+};
 
 }  // namespace esp_cxx
 

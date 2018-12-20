@@ -15,8 +15,8 @@ void SendWifiConfig(HttpResponse response) {
   static const std::experimental::string_view kConfigMid("', 'password': '");
   static const std::experimental::string_view kConfigEnd("' }");
   constexpr char kNotSet[] = "(not set)";
-  std::string ssid = GetWifiSsid().value_or(kNotSet);
-  std::string password = GetWifiPassword().value_or(kNotSet);
+  std::string ssid = Wifi::GetSsid().value_or(kNotSet);
+  std::string password = Wifi::GetPassword().value_or(kNotSet);
 
   // TODO(awong): Move to a json response handler.
   response.Send(200,
@@ -42,16 +42,16 @@ bool HandleUpdateEntry(std::string_view data, jsmntok_t field_token,
 
   if (kSsidKey == field) {
     std::string_view value = TokenToStringView(data, value_token);
-    if (value.size() > kSsidBytes - 1) {
+    if (value.size() > Wifi::kSsidBytes - 1) {
       return false;
     }
-    SetWifiSsid(std::string(value));
+    Wifi::SetSsid(std::string(value));
   } else if (kPasswordKey == field) {
     std::string_view value = TokenToStringView(data, value_token);
-    if (value.size() > kSsidBytes - 1) {
+    if (value.size() > Wifi::kPasswordBytes - 1) {
       return false;
     }
-    SetWifiPassword(std::string(value));
+    Wifi::SetPassword(std::string(value));
   }
 
   return true;

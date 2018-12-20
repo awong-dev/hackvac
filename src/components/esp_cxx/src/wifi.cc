@@ -2,16 +2,26 @@
 
 #include <string.h>
 
-#include "esp_cxx/logging.h"
-#include "esp_cxx/nvs_handle.h"
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+
+#include "esp_cxx/logging.h"
+#include "esp_cxx/nvs_handle.h"
 
 #include "esp_event_loop.h"
 #include "esp_wifi.h"
 
 namespace esp_cxx {
+
+#if FAKE_ESP_IDF == 0
+#define fldsiz(name, field) (sizeof(((name *)0)->field))
+static_assert(Wifi::kSsidBytes == fldsiz(wifi_config_t, sta.ssid),
+              "Ssid field size changed");
+static_assert(Wifi::kPasswordBytes == fldsiz(wifi_config_t, sta.password),
+              "Password field size changed");
+#undef fldsize
+#endif
+
 namespace {
 
 constexpr char kSsidNvsKey[] = "ssid";
@@ -58,43 +68,6 @@ esp_err_t EspEventHandler(void *ctx, system_event_t *event) {
     return ESP_OK;
 }
 
-}  // namespace
-
-
-bool LoadConfigFromNvs(
-    const char fallback_ssid[], size_t fallback_ssid_len,
-    const char fallback_password[], size_t fallback_password_len,
-    wifi_config_t *wifi_config) {
-  memset(wifi_config, 0, sizeof(wifi_config_t));
-
-  std::string ssid = GetWifiSsid().value_or(std::string());
-  std::string password = GetWifiPassword().value_or(std::string());
-
-  assert(ssid.size() <= sizeof(wifi_config->sta.ssid));
-  assert(password.size() <= sizeof(wifi_config->sta.password));
-
-  ESP_LOGW(kEspCxxTag, "Got config ssid: %.*s password: %.*s",
-           ssid.size(), ssid.data(),
-           password.size(), password.data());
-  if (!ssid.empty() && !password.empty()) {
-    strcpy((char*)&wifi_config->sta.ssid[0], ssid.c_str());
-    strcpy((char*)&wifi_config->sta.password[0], password.c_str());
-    return true;
-  } else {
-    // TOOD(awong): Assert on size overage.
-    // TODO(awong): Don't forget to set country.
-    memcpy(&wifi_config->ap.ssid[0], fallback_ssid, fallback_ssid_len);
-    wifi_config->ap.ssid_len = fallback_ssid_len;
-    memcpy(&wifi_config->ap.password[0], fallback_password, fallback_password_len);
-    if (fallback_password_len > 0) {
-      wifi_config->ap.authmode = WIFI_AUTH_WPA2_PSK;
-    }
-    wifi_config->ap.max_connection = 4;
-    wifi_config->ap.beacon_interval = 100;
-    return false;
-  }
-}
-
 void WifiConnect(const wifi_config_t& wifi_config, bool is_station) {
   g_wifi_event_group = xEventGroupCreate();
 
@@ -121,17 +94,25 @@ void WifiConnect(const wifi_config_t& wifi_config, bool is_station) {
            wifi_config.sta.ssid, wifi_config.sta.password);
 }
 
-std::optional<std::string> GetWifiSsid() {
+}  // namespace
+
+Wifi::Wifi() = default;
+
+Wifi::~Wifi() {
+  Disconnect();
+}
+
+std::optional<std::string> Wifi::GetSsid() {
   NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
   return nvs_wifi_config.GetString(kSsidNvsKey);
 }
 
-std::optional<std::string> GetWifiPassword() {
+std::optional<std::string> Wifi::GetPassword() {
   NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
   return nvs_wifi_config.GetString(kPasswordNvsKey);
 }
 
-void SetWifiSsid(const std::string& ssid) {
+void Wifi::SetSsid(const std::string& ssid) {
   assert(ssid.size() <= kSsidBytes);
   NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READWRITE);
 
@@ -139,12 +120,71 @@ void SetWifiSsid(const std::string& ssid) {
   nvs_wifi_config.SetString(kSsidNvsKey, ssid);
 }
 
-void SetWifiPassword(const std::string& password) {
+void Wifi::SetPassword(const std::string& password) {
   assert(password.size() < kPasswordBytes);
   NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READWRITE);
 
   ESP_LOGD(kEspCxxTag, "Writing password: %s", password.c_str());
   nvs_wifi_config.SetString(kPasswordNvsKey, password);
+}
+
+bool Wifi::ConnectToAP() {
+  wifi_config_t wifi_config = {};
+
+  std::string ssid = GetSsid().value_or(std::string());
+  std::string password = GetPassword().value_or(std::string());
+  if (ssid.empty() || password.empty() ||
+      ssid.size() > sizeof(wifi_config.sta.ssid) ||
+      password.size() > sizeof(wifi_config.sta.password)) {
+    ESP_LOGE(kEspCxxTag,
+             "Stored Ssid or Password has invalid length. Resetting to "
+             "empty which may end up here again.");
+    SetSsid("");
+    SetPassword("");
+    return false;
+  }
+
+  ESP_LOGW(kEspCxxTag, "Got config ssid: %s password: %s",
+           ssid.c_str(), password.c_str());
+  strcpy((char*)&wifi_config.sta.ssid[0], ssid.c_str());
+  strcpy((char*)&wifi_config.sta.password[0], password.c_str());
+
+  WifiConnect(wifi_config, true);
+  return true;
+}
+
+bool Wifi::CreateSetupNetwork(const std::string& setup_ssid,
+                              const std::string& setup_password) {
+  wifi_config_t wifi_config = {};
+
+  if (setup_ssid.empty() || // Allow empty password.
+      setup_ssid.size() > sizeof(wifi_config.ap.ssid) ||
+      setup_password.size() > sizeof(wifi_config.ap.password)) {
+    ESP_LOGE(kEspCxxTag, "Setup Ssid or Password has invalid length");
+    return false;
+  }
+
+  // TODO(awong): Don't forget to set country.
+  strcpy((char*)&wifi_config.ap.ssid[0], setup_ssid.c_str());
+  strcpy((char*)&wifi_config.ap.password[0], setup_password.c_str());
+
+  // Assume null termination always since c_str() is used.
+  wifi_config.ap.ssid_len = 0;
+
+  if (!setup_password.empty()) {
+    wifi_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
+  }
+  wifi_config.ap.max_connection = 4;
+  wifi_config.ap.beacon_interval = 100;
+
+  ESP_LOGW(kEspCxxTag, "Creating setup network at ssid: %s password: %s",
+           setup_ssid.c_str(), setup_password.c_str());
+  WifiConnect(wifi_config, false);
+  return true;
+}
+
+void Wifi::Disconnect() {
+  esp_wifi_stop();
 }
 
 }  // namespace esp_cxx

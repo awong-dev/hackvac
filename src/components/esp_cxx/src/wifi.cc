@@ -1,4 +1,3 @@
-#if 0
 #include "esp_cxx/wifi.h"
 
 #include <string.h>
@@ -10,9 +9,7 @@
 #include "freertos/event_groups.h"
 
 #include "esp_event_loop.h"
-#include "esp_log.h"
 #include "esp_wifi.h"
-#include "nvs_flash.h"
 
 namespace esp_cxx {
 namespace {
@@ -70,20 +67,24 @@ bool LoadConfigFromNvs(
     wifi_config_t *wifi_config) {
   memset(wifi_config, 0, sizeof(wifi_config_t));
 
-  size_t ssid_len = sizeof(wifi_config->sta.ssid);
-  size_t password_len = sizeof(wifi_config->sta.password);
-  bool has_config = GetWifiSsid((char*)&wifi_config->sta.ssid[0], &ssid_len) &&
-    GetWifiPassword((char*)&wifi_config->sta.password[0], &password_len);
+  std::string ssid = GetWifiSsid().value_or(std::string());
+  std::string password = GetWifiPassword().value_or(std::string());
+
+  assert(ssid.size() <= sizeof(wifi_config->sta.ssid));
+  assert(password.size() <= sizeof(wifi_config->sta.password));
+
   ESP_LOGW(kEspCxxTag, "Got config ssid: %.*s password: %.*s",
-           ssid_len, wifi_config->sta.ssid,
-           password_len, wifi_config->sta.password);
-  if (has_config && ssid_len > 1 && password_len > 1) {
+           ssid.size(), ssid.data(),
+           password.size(), password.data());
+  if (!ssid.empty() && !password.empty()) {
+    strcpy((char*)&wifi_config->sta.ssid[0], ssid.c_str());
+    strcpy((char*)&wifi_config->sta.password[0], password.c_str());
     return true;
   } else {
     // TOOD(awong): Assert on size overage.
     // TODO(awong): Don't forget to set country.
     memcpy(&wifi_config->ap.ssid[0], fallback_ssid, fallback_ssid_len);
-    wifi_config->ap.ssid_len = ssid_len;
+    wifi_config->ap.ssid_len = fallback_ssid_len;
     memcpy(&wifi_config->ap.password[0], fallback_password, fallback_password_len);
     if (fallback_password_len > 0) {
       wifi_config->ap.authmode = WIFI_AUTH_WPA2_PSK;
@@ -120,65 +121,30 @@ void WifiConnect(const wifi_config_t& wifi_config, bool is_station) {
            wifi_config.sta.ssid, wifi_config.sta.password);
 }
 
-bool GetWifiSsid(char* ssid, size_t* len) {
+std::optional<std::string> GetWifiSsid() {
   NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
-  size_t stored_len;
-  esp_err_t err = nvs_get_str(nvs_wifi_config.get(), kSsidNvsKey, nullptr, &stored_len);
-  if (err == ESP_OK) {
-    if (stored_len > *len) {
-      return false;
-    }
-    ESP_ERROR_CHECK(nvs_get_str(nvs_wifi_config.get(), kSsidNvsKey, ssid, len));
-  } else if (err == ESP_ERR_NVS_NOT_FOUND ||
-             err == ESP_ERR_NVS_INVALID_HANDLE) {
-    // ESP_ERR_NVS_INVALID_HANDLE occurs if namespace has never been written.
-    return false;
-  } else {
-    ESP_ERROR_CHECK(err);
-  }
-  return true;
+  return nvs_wifi_config.GetString(kSsidNvsKey);
 }
 
-bool GetWifiPassword(char* password, size_t* len) {
+std::optional<std::string> GetWifiPassword() {
   NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
-  size_t stored_len;
-  esp_err_t err = nvs_get_str(nvs_wifi_config.get(), kPasswordNvsKey, nullptr, &stored_len);
-  if (err == ESP_OK) {
-    if (stored_len > *len) {
-      return false;
-    }
-    ESP_ERROR_CHECK(nvs_get_str(nvs_wifi_config.get(), kPasswordNvsKey, password, len));
-  } else if (err == ESP_ERR_NVS_NOT_FOUND ||
-             err == ESP_ERR_NVS_INVALID_HANDLE) {
-    // ESP_ERR_NVS_INVALID_HANDLE occurs if namespace has never been written.
-    return false;
-  } else {
-    ESP_ERROR_CHECK(err);
-  }
-  return true;
+  return nvs_wifi_config.GetString(kPasswordNvsKey);
 }
 
-void SetWifiSsid(const char* ssid) {
+void SetWifiSsid(const std::string& ssid) {
+  assert(ssid.size() <= kSsidBytes);
   NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READWRITE);
-  char trimmed_ssid[kSsidBytes];
 
-  strncpy(trimmed_ssid, ssid, sizeof(trimmed_ssid));
-  trimmed_ssid[sizeof(trimmed_ssid) - 1] = '\0';
-
-  ESP_LOGD(kEspCxxTag, "Writing ssid: %s", trimmed_ssid);
-  ESP_ERROR_CHECK(nvs_set_str(nvs_wifi_config.get(), kSsidNvsKey, trimmed_ssid));
+  ESP_LOGD(kEspCxxTag, "Writing ssid: %s", ssid.c_str());
+  nvs_wifi_config.SetString(kSsidNvsKey, ssid);
 }
 
-void SetWifiPassword(const char* password) {
+void SetWifiPassword(const std::string& password) {
+  assert(password.size() < kPasswordBytes);
   NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READWRITE);
-  char trimmed_password[sizeof(((wifi_config_t*)0)->sta.password)];
 
-  strncpy(trimmed_password, password, sizeof(trimmed_password));
-  trimmed_password[sizeof(trimmed_password) - 1] = '\0';
-
-  ESP_LOGD(kEspCxxTag, "Writing password: %s", trimmed_password);
-  ESP_ERROR_CHECK(nvs_set_str(nvs_wifi_config.get(), kPasswordNvsKey, trimmed_password));
+  ESP_LOGD(kEspCxxTag, "Writing password: %s", password.c_str());
+  nvs_wifi_config.SetString(kPasswordNvsKey, password);
 }
 
 }  // namespace esp_cxx
-#endif

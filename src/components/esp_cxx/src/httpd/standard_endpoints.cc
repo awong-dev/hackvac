@@ -4,7 +4,6 @@
 #include "esp_cxx/logging.h"
 #include "esp_cxx/wifi.h"
 
-#if 0
 #include "driver/gpio.h"
 #include "jsmn.h"
 
@@ -15,33 +14,18 @@ void SendWifiConfig(HttpResponse response) {
   static const std::experimental::string_view kConfigStart("{ 'ssid': '");
   static const std::experimental::string_view kConfigMid("', 'password': '");
   static const std::experimental::string_view kConfigEnd("' }");
-  char ssid[kSsidBytes];
-  size_t ssid_len = sizeof(ssid);
-  char password[kPasswordBytes];
-  size_t password_len = sizeof(password);
-  if (!GetWifiSsid(&ssid[0], &ssid_len)) {
-    constexpr char kNotSet[] = "(not set)";
-    strcpy(ssid, kNotSet);
-    ssid_len = strlen(kNotSet);
-  } else {
-    ssid_len--;  // null terminator.
-  }
-  if (!GetWifiPassword(&password[0], &password_len)) {
-    constexpr char kNotSet[] = "(not set)";
-    strcpy(password, kNotSet);
-    password_len = strlen(kNotSet);
-  } else {
-    password_len--;  // null terminator.
-  }
+  constexpr char kNotSet[] = "(not set)";
+  std::string ssid = GetWifiSsid().value_or(kNotSet);
+  std::string password = GetWifiPassword().value_or(kNotSet);
 
   // TODO(awong): Move to a json response handler.
   response.Send(200,
-                kConfigStart.size() + ssid_len + kConfigMid.size() +
-                password_len + kConfigEnd.size(),
+                kConfigStart.size() + ssid.size() + kConfigMid.size() +
+                password.size() + kConfigEnd.size(),
                 HttpResponse::kContentTypeJson, kConfigStart);
-  response.SendMore({ssid, ssid_len});
+  response.SendMore(ssid);
   response.SendMore(kConfigMid);
-  response.SendMore({password, password_len});
+  response.SendMore(password);
   response.SendMore(kConfigEnd);
 }
 
@@ -58,24 +42,16 @@ bool HandleUpdateEntry(std::string_view data, jsmntok_t field_token,
 
   if (kSsidKey == field) {
     std::string_view value = TokenToStringView(data, value_token);
-    // TODO(awong): Rewrite this logic to be less ugly.
-    char ssid[kSsidBytes];
     if (value.size() > kSsidBytes - 1) {
       return false;
     }
-    memcpy(ssid, value.data(), value.size());
-    ssid[value.size()] = '\0';
-    SetWifiSsid(ssid);
+    SetWifiSsid(std::string(value));
   } else if (kPasswordKey == field) {
     std::string_view value = TokenToStringView(data, value_token);
-    // TODO(awong): Rewrite this logic to be less ugly.
-    char password[kPasswordBytes];
-    if (value.size() > kPasswordBytes - 1) {
+    if (value.size() > kSsidBytes - 1) {
       return false;
     }
-    memcpy(password, value.data(), value.size());
-    password[value.size()] = '\0';
-    SetWifiPassword(password);
+    SetWifiPassword(std::string(value));
   }
 
   return true;
@@ -198,4 +174,3 @@ void StandardEndpoints::LedOffEndpoint(HttpRequest request,
 
 }  // namespace esp_cxx
 
-#endif

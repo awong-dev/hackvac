@@ -1,6 +1,7 @@
-#if 0
 #ifndef ESPCXX_WIFI_H_
 #define ESPCXX_WIFI_H_
+
+#include "esp_cxx/cxx17hack.h"
 
 #include "esp_wifi.h"
 
@@ -17,14 +18,16 @@ bool LoadConfigFromNvs(
     wifi_config_t *wifi_config);
 
 // Set and get the ssid/password from Nvs.
-bool GetWifiSsid(char* ssid, size_t* len);
-bool GetWifiPassword(char* password, size_t* len);
-void SetWifiSsid(const char* ssid);
-void SetWifiPassword(const char* password);
+std::optional<std::string> GetWifiSsid();
+std::optional<std::string> GetWifiPassword();
+
+// The passed in string_views MUST be null terminated and smaller than
+// kSsidBytes and kPasswordBytes respecitvely.
+void SetWifiSsid(const std::string& ssid);
+void SetWifiPassword(const std::string& password);
 
 void WifiConnect(const wifi_config_t& wifi_config, bool is_station);
 
 }  // namespace esp_cxx
 
 #endif  // ESPCXX_WIFI_H_
-#endif

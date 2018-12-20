@@ -1,3 +1,4 @@
+#if 0
 #include "esp_cxx/wifi.h"
 
 #include <string.h>
@@ -180,3 +181,4 @@ void SetWifiPassword(const char* password) {
 }
 
 }  // namespace esp_cxx
+#endif

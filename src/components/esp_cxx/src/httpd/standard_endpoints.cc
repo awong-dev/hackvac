@@ -2,11 +2,10 @@
 
 #include "esp_cxx/cxx17hack.h"
 #include "esp_cxx/logging.h"
-#if 0
 #include "esp_cxx/wifi.h"
 
+#if 0
 #include "driver/gpio.h"
-#include "esp_log.h"
 #include "jsmn.h"
 
 namespace esp_cxx {

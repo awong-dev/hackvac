@@ -1,3 +1,4 @@
+#if 0
 #ifndef ESPCXX_WIFI_H_
 #define ESPCXX_WIFI_H_
 
@@ -26,3 +27,4 @@ void WifiConnect(const wifi_config_t& wifi_config, bool is_station);
 }  // namespace esp_cxx
 
 #endif  // ESPCXX_WIFI_H_
+#endif

@@ -2,30 +2,34 @@
 
 #include <string.h>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/event_groups.h"
-
 #include "esp_cxx/logging.h"
 #include "esp_cxx/nvs_handle.h"
 
+#ifndef FAKE_ESP_IDF
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
+
 #include "esp_event_loop.h"
 #include "esp_wifi.h"
+#endif
 
 namespace esp_cxx {
 
-#if FAKE_ESP_IDF == 0
+#ifndef FAKE_ESP_IDF
 #define fldsiz(name, field) (sizeof(((name *)0)->field))
 static_assert(Wifi::kSsidBytes == fldsiz(wifi_config_t, sta.ssid),
               "Ssid field size changed");
 static_assert(Wifi::kPasswordBytes == fldsiz(wifi_config_t, sta.password),
               "Password field size changed");
 #undef fldsize
-#endif
+#endif  // FAKE_ESP_IDF
 
 namespace {
 
 constexpr char kSsidNvsKey[] = "ssid";
 constexpr char kPasswordNvsKey[] = "password";
+
+#ifndef FAKE_ESP_IDF
 
 /* FreeRTOS event group to signal when we are connected*/
 // TODO(awong): Why are we bothering with this signal? Can't an atomic be used?
@@ -93,6 +97,7 @@ void WifiConnect(const wifi_config_t& wifi_config, bool is_station) {
            is_station ? "connect to ap" : "created network",
            wifi_config.sta.ssid, wifi_config.sta.password);
 }
+#endif  // FAKE_ESP_IDF
 
 }  // namespace
 
@@ -103,18 +108,18 @@ Wifi::~Wifi() {
 }
 
 std::optional<std::string> Wifi::GetSsid() {
-  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
+  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NvsHandle::Mode::kReadOnly);
   return nvs_wifi_config.GetString(kSsidNvsKey);
 }
 
 std::optional<std::string> Wifi::GetPassword() {
-  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READONLY);
+  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NvsHandle::Mode::kReadOnly);
   return nvs_wifi_config.GetString(kPasswordNvsKey);
 }
 
 void Wifi::SetSsid(const std::string& ssid) {
   assert(ssid.size() <= kSsidBytes);
-  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READWRITE);
+  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NvsHandle::Mode::kReadWrite);
 
   ESP_LOGD(kEspCxxTag, "Writing ssid: %s", ssid.c_str());
   nvs_wifi_config.SetString(kSsidNvsKey, ssid);
@@ -122,13 +127,14 @@ void Wifi::SetSsid(const std::string& ssid) {
 
 void Wifi::SetPassword(const std::string& password) {
   assert(password.size() < kPasswordBytes);
-  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NVS_READWRITE);
+  NvsHandle nvs_wifi_config = NvsHandle::OpenWifiConfig(NvsHandle::Mode::kReadWrite);
 
   ESP_LOGD(kEspCxxTag, "Writing password: %s", password.c_str());
   nvs_wifi_config.SetString(kPasswordNvsKey, password);
 }
 
 bool Wifi::ConnectToAP() {
+#ifndef FAKE_ESP_IDF
   wifi_config_t wifi_config = {};
 
   std::string ssid = GetSsid().value_or(std::string());
@@ -150,11 +156,13 @@ bool Wifi::ConnectToAP() {
   strcpy((char*)&wifi_config.sta.password[0], password.c_str());
 
   WifiConnect(wifi_config, true);
+#endif
   return true;
 }
 
 bool Wifi::CreateSetupNetwork(const std::string& setup_ssid,
                               const std::string& setup_password) {
+#ifndef FAKE_ESP_IDF
   wifi_config_t wifi_config = {};
 
   if (setup_ssid.empty() || // Allow empty password.
@@ -180,11 +188,14 @@ bool Wifi::CreateSetupNetwork(const std::string& setup_ssid,
   ESP_LOGW(kEspCxxTag, "Creating setup network at ssid: %s password: %s",
            setup_ssid.c_str(), setup_password.c_str());
   WifiConnect(wifi_config, false);
+#endif  // FAKE_ESP_IDF
   return true;
 }
 
 void Wifi::Disconnect() {
+#ifndef FAKE_ESP_IDF
   esp_wifi_stop();
+#endif  // FAKE_ESP_IDF
 }
 
 }  // namespace esp_cxx

@@ -1,20 +1,25 @@
 #include "esp_cxx/httpd/standard_endpoints.h"
 
+#include <string>
+
 #include "esp_cxx/cxx17hack.h"
 #include "esp_cxx/logging.h"
 #include "esp_cxx/wifi.h"
 
+#ifndef FAKE_ESP_IDF
 #include "driver/gpio.h"
+#endif 
+
 #include "jsmn.h"
 
 namespace esp_cxx {
 
 namespace {
 void SendWifiConfig(HttpResponse response) {
-  static const std::experimental::string_view kConfigStart("{ 'ssid': '");
-  static const std::experimental::string_view kConfigMid("', 'password': '");
-  static const std::experimental::string_view kConfigEnd("' }");
-  constexpr char kNotSet[] = "(not set)";
+  static const std::string_view kConfigStart("{ 'ssid': '");
+  static const std::string_view kConfigMid("', 'password': '");
+  static const std::string_view kConfigEnd("' }");
+  static const char kNotSet[] = "(not set)";
   std::string ssid = Wifi::GetSsid().value_or(kNotSet);
   std::string password = Wifi::GetPassword().value_or(kNotSet);
 
@@ -139,7 +144,9 @@ void StandardEndpoints::RegisterEndpoints(HttpServer* server) {
 
 void StandardEndpoints::ResetEndpoint(HttpRequest request, HttpResponse response) {
   if (request.method() == HttpMethod::kGet) {
+#ifndef FAKE_ESP_IDF
     esp_restart();
+#endif
   }
 }
 
@@ -156,20 +163,24 @@ void StandardEndpoints::WifiConfigEndpoint(HttpRequest request, HttpResponse res
 
 void StandardEndpoints::LedOnEndpoint(HttpRequest request,
                                       HttpResponse response) {
+#ifndef FAKE_ESP_IDF
   const char* message =
     gpio_get_level(GPIO_NUM_2) ? "Was on now on" : "Was off now on";
   response.Send(200, strlen(message), HttpResponse::kContentTypePlain,
                 message);
   gpio_set_level(GPIO_NUM_2, 1);
+#endif
 }
 
 void StandardEndpoints::LedOffEndpoint(HttpRequest request,
                                        HttpResponse response) {
+#ifndef FAKE_ESP_IDF
   const char* message =
     gpio_get_level(GPIO_NUM_2) ? "Was on now off" : "Was off now off";
   response.Send(200, strlen(message), HttpResponse::kContentTypePlain,
                 message);
   gpio_set_level(GPIO_NUM_2, 0);
+#endif
 }
 
 }  // namespace esp_cxx

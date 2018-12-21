@@ -8,7 +8,7 @@ CC := gcc
 CXX := g++
 HOST_EXCLUDED_CFLAGS := -fstrict-volatile-bitfields -mlongcalls -Wno-error=unused-but-set-variable
 # TODO(awong): Wno-format is unfortnate.
-EXTRA_CFLAGS := -I$(component_include_dir) -I$(mongoose_path)/include -DFAKE_ESP_IDF=1 -Wno-format -I$(IDF_PATH)/components/mbedtls/include -I$(IDF_PATH)/components/mbedtls/port/include -I${BUILD_DIR_BASE}/include
+EXTRA_CFLAGS := -I$(component_include_dir) -I$(mongoose_path)/include -DFAKE_ESP_IDF=1 -Wno-format -I$(IDF_PATH)/components/mbedtls/include -I$(IDF_PATH)/components/jsmn/include -I$(IDF_PATH)/components/mbedtls/port/include -I${BUILD_DIR_BASE}/include
 CXXFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CXXFLAGS)) $(EXTRA_CFLAGS) -std=c++17 
 CFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CFLAGS)) $(EXTRA_CFLAGS)
 
@@ -17,13 +17,14 @@ HOST_EXCLUDED_CPPFLAGS := -DMBEDTLS_CONFIG_FILE='"mbedtls/esp_config.h"'
 CPPFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CPPFLAGS))
 $(info ${CPPFLAGS})
 
-ESP_CXX_FILES := $(wildcard ${COMPONENT_PATH}/host_test/*.cc) ${COMPONENT_PATH}/src/task.cc $(wildcard ${COMPONENT_PATH}/src/httpd/*.cc) 
+ESP_CXX_FILES := $(wildcard ${COMPONENT_PATH}/host_test/*.cc) ${COMPONENT_PATH}/src/task.cc $(wildcard ${COMPONENT_PATH}/src/httpd/*.cc) $(wildcard ${COMPONENT_PATH}/src/*.cc)
 MBEDTLS_FILES := $(wildcard $(IDF_PATH)/components/mbedtls/library/*.c)
 
 ESP_CXX_OBJS := $(ESP_CXX_FILES:.cc=.o) 
 MONGOOSE_FILES := $(mongoose_path)/src/mongoose.c
+JSMN_FILES := $(wildcard $(IDF_PATH)/components/jsmn/src/*.c)
 
-$(BUILD_DIR_BASE)/host_test: $(ESP_CXX_OBJS) $(MBEDTLS_FILES:.c=.o) $(MONGOOSE_FILES:.c=.o) 
+$(BUILD_DIR_BASE)/host_test: $(ESP_CXX_OBJS) $(MBEDTLS_FILES:.c=.o) $(MONGOOSE_FILES:.c=.o) $(JSMN_FILES:.c=.o) 
 	g++ -pthreads -o$@ $^
 
 #	c++ -Wno-format -pthreads -D_POSIX_THREADS=1 -DFAKE_ESP_IDF=1 -std=c++17 -Wno-unknown-attributes -I$(component_include_dir) -I$(mongoose_path)/include -I$(IDF_PATH)/components/mbedtls/include -I$(IDF_PATH)/components/mbedtls/port/include -I${BUILD_DIR_BASE}/include ${CPPFLAGS} $^ -o ${BUILD_DIR_BASE}/host_$@

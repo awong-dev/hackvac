@@ -3,29 +3,44 @@
 
 #include "esp_cxx/cxx17hack.h"
 
+#include <string>
+
+#ifndef FAKE_ESP_IDF
 #include "nvs_flash.h"
+#endif
 
 namespace esp_cxx {
 
 // RAII class for opening up an NVS handle.
 class NvsHandle {
  public:
-  NvsHandle(const char* name, nvs_open_mode mode);
+#ifdef FAKE_ESP_IDF
+  enum class Mode { kReadOnly, kReadWrite };
+  using nvs_handle = void*;
+#else
+  enum class Mode : nvs_open_mode {
+    kReadOnly = NVS_READONLY,
+    kReadWrite = NVS_READWRITE 
+  };
+#endif
+
+  NvsHandle(const char* name, Mode mode);
   ~NvsHandle();
 
   NvsHandle(NvsHandle&& other);
   NvsHandle& operator=(NvsHandle&&);
 
-  static NvsHandle OpenWifiConfig(nvs_open_mode mode);
-  static NvsHandle OpenOtaState(nvs_open_mode mode);
+  static NvsHandle OpenWifiConfig(Mode mode);
+  static NvsHandle OpenOtaState(Mode mode);
 
   std::optional<std::string> GetString(const char* key);
   void SetString(const char* key, const std::string& value);
 
-  nvs_handle get() const { return handle_; }
+  std::optional<uint8_t> GetByte(const char* key);
+  void SetByte(const char* key, uint8_t value);
 
  private:
-  nvs_handle handle_;
+  nvs_handle handle_ = nullptr;
 
   NvsHandle(NvsHandle&) = delete;
   void operator=(NvsHandle&) = delete;

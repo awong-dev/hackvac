@@ -15,7 +15,7 @@ int main(void) {
     std::atomic_bool flag{false};
     esp_cxx::Task t(&TaskMain, &flag, "test");
     while (flag != true);
-    fprintf(stderr, "success\n");
+    fprintf(stderr, "task success\n");
   }
   return 0;
 }

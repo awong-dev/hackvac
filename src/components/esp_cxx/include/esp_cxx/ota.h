@@ -53,10 +53,12 @@ class OtaWriter {
   void SetBootPartition();
 
  private:
-  mbedtls_md5_context md5_ctx_ = {};
   std::array<uint8_t, 16> md5_ = {};
+#ifndef FAKE_ESP_IDF
+  mbedtls_md5_context md5_ctx_ = {};
   const esp_partition_t* update_partition_ = nullptr;
   esp_ota_handle_t ota_handle_ = 0;  // Per code inspection, 0 seems to invalid.
+#endif
 };
 
 }  // namespace esp_cxx

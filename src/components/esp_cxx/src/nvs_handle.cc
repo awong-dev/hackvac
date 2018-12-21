@@ -4,12 +4,16 @@
 
 namespace esp_cxx {
 
-NvsHandle::NvsHandle(const char* name, nvs_open_mode mode) {
+NvsHandle::NvsHandle(const char* name, Mode mode) {
+#ifndef FAKE_ESP_IDF
   nvs_open(name, mode, &handle_);
+#endif
 }
 
 NvsHandle::~NvsHandle() {
+#ifndef FAKE_ESP_IDF
   nvs_close(handle_);
+#endif
 }
 
 NvsHandle::NvsHandle(NvsHandle&& other) : handle_(other.handle_) {
@@ -21,19 +25,20 @@ NvsHandle& NvsHandle::operator=(NvsHandle&& other) {
   return *this;
 }
 
-NvsHandle NvsHandle::OpenWifiConfig(nvs_open_mode mode) {
+NvsHandle NvsHandle::OpenWifiConfig(Mode mode) {
   return NvsHandle("wifi_config", mode);
 }
 
-NvsHandle NvsHandle::OpenOtaState(nvs_open_mode mode) {
+NvsHandle NvsHandle::OpenOtaState(Mode mode) {
   return NvsHandle("ota_state", mode);
 }
 
 std::optional<std::string> NvsHandle::GetString(const char* key) {
   // Per ESP-IDF spec, 15 bytes w/o null terminator is max for key.
   assert(strlen(key) <= 15);
-
   std::optional<std::string> result;
+
+#ifndef FAKE_ESP_IDF
   size_t stored_len;
   esp_err_t err = nvs_get_str(handle_, key, nullptr, &stored_len);
   if (err == ESP_OK) {
@@ -48,6 +53,7 @@ std::optional<std::string> NvsHandle::GetString(const char* key) {
   } else {
     ESP_ERROR_CHECK(err);
   }
+#endif  // FAKE_ESP_IDF
   
   return result;
 }
@@ -56,7 +62,35 @@ void NvsHandle::SetString(const char* key, const std::string& value) {
   // Per ESP-IDF spec, 15 bytes w/o null terminator is max for key.
   assert(strlen(key) <= 15);
 
+#ifndef FAKE_ESP_IDF
   ESP_ERROR_CHECK(nvs_set_str(handle_, key, value.c_str()));
+#endif  // FAKE_ESP_IDF
+}
+
+std::optional<uint8_t> NvsHandle::GetByte(const char* key) {
+  std::optional<uint8_t> result;
+
+#ifndef FAKE_ESP_IDF
+  uint8_t value;
+  esp_err_t result = nvs_get_u8(handle_, key, &value);
+  if (result == ESP_OK) {
+    result = value;
+  } else if (result == ESP_ERR_NVS_NOT_FOUND) {
+  } else {
+    ESP_ERROR_CHECK(result);
+  }
+#endif
+
+  return result;
+}
+
+void NvsHandle::SetByte(const char* key, uint8_t value) {
+  // Per ESP-IDF spec, 15 bytes w/o null terminator is max for key.
+  assert(strlen(key) <= 15);
+
+#ifndef FAKE_ESP_IDF
+  ESP_ERROR_CHECK(nvs_set_u8(handle.get(), key, value));
+#endif  // FAKE_ESP_IDF
 }
 
 }  // namespace esp_cxx

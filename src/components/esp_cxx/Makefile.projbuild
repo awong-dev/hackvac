@@ -12,21 +12,41 @@ EXTRA_CFLAGS := -I$(component_include_dir) -I$(mongoose_path)/include -DFAKE_ESP
 CXXFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CXXFLAGS)) $(EXTRA_CFLAGS) -std=c++17 
 CFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CFLAGS)) $(EXTRA_CFLAGS)
 
-$(info ${CPPFLAGS})
 HOST_EXCLUDED_CPPFLAGS := -DMBEDTLS_CONFIG_FILE='"mbedtls/esp_config.h"'
 CPPFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CPPFLAGS))
-$(info ${CPPFLAGS})
 
-ESP_CXX_FILES := $(wildcard ${COMPONENT_PATH}/host_test/*.cc) ${COMPONENT_PATH}/src/task.cc $(wildcard ${COMPONENT_PATH}/src/httpd/*.cc) $(wildcard ${COMPONENT_PATH}/src/*.cc)
+ESP_CXX_FILES := $(wildcard $(COMPONENT_PATH)/host_test/*.cc) $(wildcard $(COMPONENT_PATH)/src/httpd/*.cc) $(wildcard $(COMPONENT_PATH)/src/*.cc)
+REL_ESP_CXX_FILES := $(foreach srcfile,$(ESP_CXX_FILES),$(subst $(COMPONENT_PATH)/,,$(srcfile)))
 MBEDTLS_FILES := $(wildcard $(IDF_PATH)/components/mbedtls/library/*.c)
 
-ESP_CXX_OBJS := $(ESP_CXX_FILES:.cc=.o) 
+ESP_CXX_OBJDIR := $(BUILD_DIR_BASE)/esp_cxx
+ESP_CXX_OBJS := $(addprefix $(ESP_CXX_OBJDIR)/, $(REL_ESP_CXX_FILES:.cc=.o))
+$(info $(REL_ESP_CXX_FILES))
+
+host_build/esp_cxx/src/%.o: $(COMPONENT_PATH)/src/%.cc
+	$(CXX) $(CFLAGS) $(CXXFLAGS) -c $(abspath $<) -o $@
+
+host_build/esp_cxx/src/%.o: $(COMPONENT_PATH)/src/%.c
+	$(CC) $(CFLAGS) -c $(abspath $<) -o $@
+
+host_build/esp_cxx/src/httpd/%.o: $(COMPONENT_PATH)/src/httpd/%.cc
+	$(CXX) $(CFLAGS) $(CXXFLAGS) -c $(abspath $<) -o $@
+
+host_build/esp_cxx/src/httpd/%.o: $(COMPONENT_PATH)/src/httpd/%.c
+	$(CC) $(CFLAGS) -c $(abspath $<) -o $@
+
+host_build/esp_cxx/host_test/%.o: $(COMPONENT_PATH)/host_test/%.cc
+	$(CXX) $(CFLAGS) $(CXXFLAGS) -c $(abspath $<) -o $@
+
+host_build/esp_cxx/host_test/%.o: $(COMPONENT_PATH)/host_test/%.c
+	$(CC) $(CFLAGS) -c $(abspath $<) -o $@
+
 MONGOOSE_FILES := $(mongoose_path)/src/mongoose.c
 JSMN_FILES := $(wildcard $(IDF_PATH)/components/jsmn/src/*.c)
 
-$(BUILD_DIR_BASE)/host_test: $(ESP_CXX_OBJS) $(MBEDTLS_FILES:.c=.o) $(MONGOOSE_FILES:.c=.o) $(JSMN_FILES:.c=.o) 
-	g++ -pthreads -o$@ $^
+HOST_TEST_OBJS := $(ESP_CXX_OBJS) $(MBEDTLS_FILES:.c=.o) $(MONGOOSE_FILES:.c=.o) $(JSMN_FILES:.c=.o) 
 
-#	c++ -Wno-format -pthreads -D_POSIX_THREADS=1 -DFAKE_ESP_IDF=1 -std=c++17 -Wno-unknown-attributes -I$(component_include_dir) -I$(mongoose_path)/include -I$(IDF_PATH)/components/mbedtls/include -I$(IDF_PATH)/components/mbedtls/port/include -I${BUILD_DIR_BASE}/include ${CPPFLAGS} $^ -o ${BUILD_DIR_BASE}/host_$@
+$(BUILD_DIR_BASE)/host_test: $(HOST_TEST_OBJS)
+	$(CXX) -pthreads -o$@ $^
 
 endif

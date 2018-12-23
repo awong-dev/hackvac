@@ -6,7 +6,7 @@ namespace esp_cxx {
 
 NvsHandle::NvsHandle(const char* name, Mode mode) {
 #ifndef FAKE_ESP_IDF
-  nvs_open(name, mode, &handle_);
+  nvs_open(name, static_cast<nvs_open_mode>(mode), &handle_);
 #endif
 }
 
@@ -72,12 +72,12 @@ std::optional<uint8_t> NvsHandle::GetByte(const char* key) {
 
 #ifndef FAKE_ESP_IDF
   uint8_t value;
-  esp_err_t result = nvs_get_u8(handle_, key, &value);
-  if (result == ESP_OK) {
+  esp_err_t err = nvs_get_u8(handle_, key, &value);
+  if (err == ESP_OK) {
     result = value;
-  } else if (result == ESP_ERR_NVS_NOT_FOUND) {
+  } else if (err == ESP_ERR_NVS_NOT_FOUND) {
   } else {
-    ESP_ERROR_CHECK(result);
+    ESP_ERROR_CHECK(err);
   }
 #endif
 
@@ -89,7 +89,7 @@ void NvsHandle::SetByte(const char* key, uint8_t value) {
   assert(strlen(key) <= 15);
 
 #ifndef FAKE_ESP_IDF
-  ESP_ERROR_CHECK(nvs_set_u8(handle.get(), key, value));
+  ESP_ERROR_CHECK(nvs_set_u8(handle_, key, value));
 #endif  // FAKE_ESP_IDF
 }
 

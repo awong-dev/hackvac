@@ -14,6 +14,7 @@ CFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CFLAGS)) $(EXTRA_CFLAGS)
 
 HOST_EXCLUDED_CPPFLAGS := -DMBEDTLS_CONFIG_FILE='"mbedtls/esp_config.h"'
 CPPFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CPPFLAGS))
+LDFLAGS := -pthreads
 
 ESP_CXX_FILES := $(wildcard $(COMPONENT_PATH)/host_test/*.cc) $(wildcard $(COMPONENT_PATH)/src/httpd/*.cc) $(wildcard $(COMPONENT_PATH)/src/*.cc)
 REL_ESP_CXX_FILES := $(foreach srcfile,$(ESP_CXX_FILES),$(subst $(COMPONENT_PATH)/,,$(srcfile)))

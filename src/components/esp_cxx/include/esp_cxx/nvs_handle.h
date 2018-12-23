@@ -9,6 +9,8 @@
 #include "nvs_flash.h"
 #endif
 
+#include <type_traits>
+
 namespace esp_cxx {
 
 // RAII class for opening up an NVS handle.
@@ -18,7 +20,7 @@ class NvsHandle {
   enum class Mode { kReadOnly, kReadWrite };
   using nvs_handle = void*;
 #else
-  enum class Mode : nvs_open_mode {
+  enum class Mode : std::underlying_type<nvs_open_mode>::type {
     kReadOnly = NVS_READONLY,
     kReadWrite = NVS_READWRITE 
   };
@@ -40,7 +42,7 @@ class NvsHandle {
   void SetByte(const char* key, uint8_t value);
 
  private:
-  nvs_handle handle_ = nullptr;
+  nvs_handle handle_ = {};
 
   NvsHandle(NvsHandle&) = delete;
   void operator=(NvsHandle&) = delete;

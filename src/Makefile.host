@@ -1,0 +1,20 @@
+## High-level configuration variables.
+BUILD_DIR_BASE := host_build
+COMPONENTS := googletest esp_cxx mongoose mbedtls json jsmn main
+
+
+## Sandwich include the normal make files.
+SDKCONFIG_MAKEFILE := $(abspath ./host-auto.conf)
+include Makefile
+
+
+## Modify CFLAGS, CXXFLAGS, CPPFLAGS, and LDFLAGS after Makefile has set them.
+HOST_EXCLUDED_CFLAGS := -fstrict-volatile-bitfields -mlongcalls -Wno-error=unused-but-set-variable -Wno-old-style-declaration
+# TODO(awong): Wno-format is unfortnate.
+EXTRA_CFLAGS := -DFAKE_ESP_IDF=1 -Wno-format
+CXXFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CXXFLAGS)) $(EXTRA_CFLAGS) -std=c++17 
+CFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CFLAGS)) $(EXTRA_CFLAGS)
+
+HOST_EXCLUDED_CPPFLAGS := -DMBEDTLS_CONFIG_FILE='"mbedtls/esp_config.h"'
+CPPFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CPPFLAGS))
+LDFLAGS := -pthreads

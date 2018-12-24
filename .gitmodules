@@ -1,3 +1,6 @@
 [submodule "src/components/mongoose/src"]
 	path = src/components/mongoose/src
 	url = https://github.com/cesanta/mongoose.git
+[submodule "src/components/googletest/dist"]
+	path = src/components/googletest/dist
+	url = https://github.com/google/googletest.git

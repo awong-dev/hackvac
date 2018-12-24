@@ -9,7 +9,7 @@ CXX := g++
 HOST_EXCLUDED_CFLAGS := -fstrict-volatile-bitfields -mlongcalls -Wno-error=unused-but-set-variable
 # TODO(awong): Wno-format is unfortnate.
 EXTRA_CFLAGS := -I$(component_include_dir) -I$(mongoose_path)/include -DFAKE_ESP_IDF=1 -Wno-format -I$(IDF_PATH)/components/mbedtls/include -I$(IDF_PATH)/components/jsmn/include -I$(IDF_PATH)/components/mbedtls/port/include -I${BUILD_DIR_BASE}/include
-CXXFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CXXFLAGS)) $(EXTRA_CFLAGS) -std=c++17 
+CXXFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CXXFLAGS)) $(EXTRA_CFLAGS) -std=gnu++17 
 CFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CFLAGS)) $(EXTRA_CFLAGS)
 
 HOST_EXCLUDED_CPPFLAGS := -DMBEDTLS_CONFIG_FILE='"mbedtls/esp_config.h"'

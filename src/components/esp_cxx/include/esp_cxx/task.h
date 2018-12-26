@@ -1,6 +1,8 @@
 #ifndef TASK_H_
 #define TASK_H_
 
+#include <utility>
+
 #if FAKE_ESP_IDF
 #include <pthread.h>
 #else  // FAKE_ESP_IDF
@@ -12,7 +14,7 @@
 namespace esp_cxx {
 
 // RAII class for opening up an NVS handle.
-class Task {
+class TaskRef {
  public:
 #if FAKE_ESP_IDF
   using PriorityType = int;
@@ -25,20 +27,64 @@ class Task {
 #else  // FAKE_ESP_IDF
   using PriorityType = UBaseType_t;
   using TaskHandle = TaskHandle_t;
-  static constexpr unsigned short kDefaultStackSize = XT_STACK_EXTRA_CLIB;
+  static constexpr unsigned short kDefaultStackSize = XT_STACK_MIN_SIZE + XT_STACK_EXTRA_CLIB;
   static constexpr PriorityType kDefaultPrio = ESP_TASK_MAIN_PRIO;
 #endif  // FAKE_ESP_IDF
 
-  Task() = default;
-  Task(Task&& other)
+  TaskRef() = default;
+  TaskRef(TaskRef&& other)
     : task_handle_(other.task_handle_) {
       other.task_handle_ = {};
   }
-  Task& operator=(Task&& rhs) {
+  TaskRef& operator=(TaskRef&& rhs) {
     task_handle_ = rhs.task_handle_;
     rhs.task_handle_ = {};
     return *this;
   }
+
+  static TaskRef CreateForCurrent() {
+    TaskRef retval;
+    retval.task_handle_ = xTaskGetCurrentTaskHandle();
+    return retval;
+  }
+
+  // Terminates the task.
+  ~TaskRef();
+
+  // Notifies the task.
+  void Notify();
+
+  // Stop the task.
+  void Stop();
+
+  // Blocks current task until a notification is received.
+  static void CurrentTaskWait();
+
+  // Sleeps the current thread for |delay_ms|.
+  static void Delay(int delay_ms);
+
+ protected:
+  TaskHandle task_handle_{};
+
+ private:
+  TaskRef(TaskRef&) = delete;
+  void operator=(TaskRef&) = delete;
+};
+
+// Same as TaskRef, but automatically closes the task.
+class Task : public TaskRef {
+ public:
+  Task();
+  Task(Task&& other)
+    : TaskRef(std::move(other)) {
+  }
+
+  Task& operator=(Task&& rhs) {
+    *this = std::move(rhs);
+    return *this;
+  }
+
+  ~Task();
 
   // Creaes and starts the task.
   Task(void (*func)(void*),
@@ -61,19 +107,9 @@ class Task {
     return Task(&MethodThunk<T, method>, obj, name, stackdepth, priority);
   }
 
-  // Terminates the task.
-  ~Task();
-
-  // Notifies the task.
-  void Notify();
-
-  // Blocks current task until a notification is received.
-  static void CurrentTaskWait();
-
  private:
-  TaskHandle task_handle_{};
-
   Task(Task&) = delete;
+
   void operator=(Task&) = delete;
 };
 

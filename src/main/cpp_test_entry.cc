@@ -17,4 +17,8 @@ void cpp_test_entry() {
   testing::InitGoogleMock(&argc, argv);
   int result = RUN_ALL_TESTS();
   ESP_LOGI("TestMain", "Test result %d", result);
+  
+  for (;;) {
+    sleep(1000);
+  }
 }

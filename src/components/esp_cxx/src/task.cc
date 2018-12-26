@@ -35,9 +35,14 @@ void* PThreadWrapperFunc(void* param) {
 
 namespace esp_cxx {
 
+Task::Task() = default;
+
 Task::Task(void (*func)(void*), void* param, const char* name,
            unsigned short stack_size, PriorityType priority) {
-#if FAKE_ESP_IDF
+// TODO(awong): This needs to prevent func from returning.
+#ifndef FAKE_ESP_IDF
+  xTaskCreate(func, name, stack_size, param, priority, &task_handle_);
+#else  // FAKE_ESP_IDF
   pthread_attr_t attr;
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
@@ -52,35 +57,47 @@ Task::Task(void (*func)(void*), void* param, const char* name,
   pthread_create(&task_handle_, &attr, &PThreadWrapperFunc, new PthreadState(func, param));
 
   pthread_attr_destroy(&attr);
-#else  // FAKE_ESP_IDF
-  xTaskCreate(func, name, stack_size, param, priority, &task_handle_);
 #endif  // FAKE_ESP_IDF
 }
 
-Task::~Task() {
-  if (task_handle_) {
-#if FAKE_ESP_IDF
-    pthread_kill(task_handle_, SIGUSR1);
+TaskRef::~TaskRef() = default;
+
+void TaskRef::Notify() {
+#ifndef FAKE_ESP_IDF
+  xTaskNotify(task_handle_, 0, eNoAction);
 #else  // FAKE_ESP_IDF
+  // TODO(awong): Signal!
+#endif  // FAKE_ESP_IDF
+}
+
+void TaskRef::Stop() {
+  if (task_handle_) {
+#ifndef FAKE_ESP_IDF
     vTaskDelete(task_handle_);
+#else  // FAKE_ESP_IDF
+    pthread_kill(task_handle_, SIGUSR1);
 #endif  // FAKE_ESP_IDF
   }
 }
 
-void Task::Notify() {
-#if FAKE_ESP_IDF
-  // TODO(awong): Signal!
+void TaskRef::CurrentTaskWait() {
+#ifndef FAKE_ESP_IDF
+  xTaskNotifyWait(0x00, ULONG_MAX, NULL, portMAX_DELAY);
 #else  // FAKE_ESP_IDF
-  xTaskNotify(task_handle_, 0, eNoAction);
+  // TODO(awong): Sleep!
 #endif  // FAKE_ESP_IDF
 }
 
-void Task::CurrentTaskWait() {
-#if FAKE_ESP_IDF
-  // TODO(awong): Sleep!
-#else  // FAKE_ESP_IDF
-  xTaskNotifyWait(0x00, ULONG_MAX, NULL, portMAX_DELAY);
-#endif  // FAKE_ESP_IDF
+void TaskRef::Delay(int delay_ms) {
+#ifndef FAKE_ESP_IDF
+  vTaskDelay(delay_ms / portTICK_PERIOD_MS);
+#else
+  sleep(delay_ms);
+#endif
+}
+
+Task::~Task() {
+  Stop();
 }
 
 }  // namespace esp_cxx

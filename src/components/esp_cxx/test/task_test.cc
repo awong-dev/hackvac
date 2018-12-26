@@ -6,17 +6,25 @@
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 
-std::atomic_bool flag{0};
+using namespace esp_cxx;
 
-// TODO(awong): This should never return.
+struct TaskData {
+  std::atomic_bool flag{false};
+  TaskRef handle_ = Task::CreateForCurrent();
+};
+
 void TaskMain(void* param) {
-  *static_cast<std::atomic_bool*>(param) = true;
+  TaskData *data = static_cast<TaskData*>(param);
+  data->flag = true;
+  data->handle_.Notify();
+  for (;;) {
+    esp_cxx::Task::Delay(1000);
+  }
 }
 
 TEST(Task, Basic) {
-  std::atomic_bool flag{false};
-  esp_cxx::Task t(&TaskMain, &flag, "test");
-  sleep(5);
-
-  ASSERT_TRUE(flag);
+  TaskData data;
+  esp_cxx::Task t(&TaskMain, &data, "test");
+  Task::CurrentTaskWait();
+  ASSERT_TRUE(data.flag);
 }

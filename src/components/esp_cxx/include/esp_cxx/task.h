@@ -44,7 +44,11 @@ class TaskRef {
 
   static TaskRef CreateForCurrent() {
     TaskRef retval;
+#ifndef FAKE_ESP_IDF
     retval.task_handle_ = xTaskGetCurrentTaskHandle();
+#else
+    retval.task_handle_ = pthread_self();
+#endif
     return retval;
   }
 
@@ -80,7 +84,7 @@ class Task : public TaskRef {
   }
 
   Task& operator=(Task&& rhs) {
-    *this = std::move(rhs);
+    *static_cast<TaskRef*>(this) = std::move(rhs);
     return *this;
   }
 

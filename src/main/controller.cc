@@ -1,6 +1,6 @@
 #include "controller.h"
 
-#include "driver/uart.h"
+#include "esp_cxx/uart.h"
 #include "esp_log.h"
 #include "event_log.h"
 
@@ -9,11 +9,11 @@ constexpr char kTag[] = "controller";
 
 constexpr gpio_num_t kPacPower = GPIO_NUM_4;
 
-constexpr uart_port_t kCn105Uart = UART_NUM_1;
+constexpr esp_cxx::Uart::Chip kCn105Uart = esp_cxx::Uart::Chip::kUart1;
 constexpr gpio_num_t kCn105TxPin = GPIO_NUM_18;
 constexpr gpio_num_t kCn105RxPin = GPIO_NUM_19;
 
-constexpr uart_port_t kTstatUart = UART_NUM_2;
+constexpr esp_cxx::Uart::Chip kTstatUart = esp_cxx::Uart::Chip::kUart2;
 constexpr gpio_num_t kTstatTxPin = GPIO_NUM_5;
 constexpr gpio_num_t kTstatRxPin = GPIO_NUM_17;
 

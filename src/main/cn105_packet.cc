@@ -1,6 +1,6 @@
 #include "cn105_packet.h"
 
-#include <esp_log.h>
+#include "esp_cxx/logging.h"
 
 namespace hackvac {
 

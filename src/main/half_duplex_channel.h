@@ -6,7 +6,7 @@
 #include <queue>
 
 #include "cn105_packet.h"
-#include "driver/uart.h"
+#include "esp_cxx/uart.h"
 
 namespace hackvac {
 
@@ -54,7 +54,7 @@ class HalfDuplexChannel {
   //     to measuring the timing of the channel logic vs when it shows up at
   //     a uart.
   HalfDuplexChannel(const char* name,
-                    uart_port_t uart,
+                    esp_cxx::Uart::Chip uart_chip,
                     gpio_num_t tx_pin,
                     gpio_num_t rx_pin,
                     PacketCallback callback,
@@ -110,7 +110,7 @@ class HalfDuplexChannel {
   const char* name_ = nullptr;
 
   // UART to read from.
-  uart_port_t uart_ = UART_NUM_MAX;
+  esp_cxx::Uart uart_;
 
   // Pin for UART TX.
   gpio_num_t tx_pin_ = GPIO_NUM_MAX;

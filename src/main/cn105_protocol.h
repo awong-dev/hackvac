@@ -66,13 +66,13 @@ class UpdatePacket {
   static std::unique_ptr<Cn105Packet> Create(const StoredHvacSettings& settings) {
     auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdate, settings.encoded_bytes());
     packet->data()[0] = static_cast<uint8_t>(CommandType::kSetSettings);
-    return std::move(packet);
+    return packet;
   };
 
   static std::unique_ptr<Cn105Packet> Create(const StoredExtendedSettings& extended_settings) {
     auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdate, extended_settings.encoded_bytes());
     packet->data()[0] = static_cast<uint8_t>(CommandType::kSetExtendedSettings);
-    return std::move(packet);
+    return packet;
   };
 
   HvacSettings settings() { return HvacSettings(packet_->data()); }
@@ -111,7 +111,7 @@ class InfoPacket {
     // TODO(awong): constructor for initializing X blank bytes.
     auto packet = std::make_unique<Cn105Packet>(PacketType::kInfo, kBlank16BytePacket);
     packet->data()[0] = static_cast<uint8_t>(type);
-    return std::move(packet);
+    return packet;
   }
 
   CommandType type() const { return static_cast<CommandType>(packet_->data()[0]); }
@@ -127,7 +127,7 @@ class InfoAckPacket {
   static std::unique_ptr<Cn105Packet> Create(const StoredHvacSettings& settings) {
     auto packet = std::make_unique<Cn105Packet>(PacketType::kInfoAck, settings.encoded_bytes());
     packet->data()[0] = static_cast<uint8_t>(CommandType::kSettings);
-    return std::move(packet);
+    return packet;
   }
 
   CommandType type() const { return static_cast<CommandType>(packet_->data()[0]); }

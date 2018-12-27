@@ -126,7 +126,7 @@ enum class CommandType : uint8_t {
 class HalfDegreeTemp {
  public:
   HalfDegreeTemp(int temp, bool plus_half)
-    : encoded_temp_(temp * 10 + plus_half ? 5 : 0) {
+    : encoded_temp_(temp * 10 + (plus_half ? 5 : 0)) {
   }
 
   bool operator< (const HalfDegreeTemp& rhs) const {
@@ -258,6 +258,9 @@ class HvacSettings {
   std::optional<HalfDegreeTemp> GetTargetTemp() const;
   void SetTargetTemp(std::optional<HalfDegreeTemp> target_temp);
 
+ protected:
+  void set_data_pointer(uint8_t* ptr) { data_ptr_ = ptr; }
+
  private:
   using SettingsBitfield = internal::SettingsBitfield;
   template <SettingsBitfield field> using Bitfield = internal::Bitfield<field>;
@@ -267,11 +270,12 @@ class HvacSettings {
 };
 
 // HvacSettings that provides its own storage. This is likely most often
-// used to actually store the settings whereas HvacSettings can be used
+// used to act=ually store the settings whereas HvacSettings can be used
 // to parse a chunk of data out of a received packet.
 class StoredHvacSettings : public HvacSettings {
  public:
-  StoredHvacSettings() : HvacSettings(data_.data()) {
+  StoredHvacSettings() : HvacSettings(nullptr) {
+    set_data_pointer(data_.data());
   }
 
   void MergeUpdate(const HvacSettings& settings_update) {
@@ -279,7 +283,7 @@ class StoredHvacSettings : public HvacSettings {
     
   // Returns the raw wireformat data bytes for an update packet. The
   // array is only valid until the next mutation of this object. Best
-  // to copy the values out immediately.
+  // to copy th e values out immediately.
   const std::array<uint8_t, 16>& encoded_bytes() const { return data_; }
 
  private:
@@ -301,13 +305,17 @@ class ExtendedSettings {
 
   std::optional<HalfDegreeTemp> GetRoomTemp() const;
 
+ protected:
+  void set_data_pointer(uint8_t* ptr) { data_ptr_ = ptr; }
+
  private:
   uint8_t* data_ptr_ = nullptr;
 };
 
 class StoredExtendedSettings : public ExtendedSettings {
  public:
-  StoredExtendedSettings() : ExtendedSettings(data_.data()) {
+  StoredExtendedSettings() : ExtendedSettings(nullptr) {
+    set_data_pointer(data_.data());
   }
 
   const std::array<uint8_t, 16>& encoded_bytes() const { return data_; }

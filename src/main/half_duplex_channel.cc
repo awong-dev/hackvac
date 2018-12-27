@@ -15,7 +15,7 @@ constexpr char kTag[] = "chan";
 }  // namespace
 
 HalfDuplexChannel::HalfDuplexChannel(const char *name,
-                                     uart_port_t uart,
+                                     esp_cxx::Uart::Chip chip,
                                      gpio_num_t tx_pin,
                                      gpio_num_t rx_pin,
                                      PacketCallback callback,
@@ -23,9 +23,7 @@ HalfDuplexChannel::HalfDuplexChannel(const char *name,
                                      gpio_num_t tx_debug_pin,
                                      gpio_num_t rx_debug_pin)
   : name_(name),
-    uart_(uart),
-    tx_pin_(tx_pin),
-    rx_pin_(rx_pin),
+    uart_(chip, tx_pin, rx_pin, 2400, esp_cxx::Uart::Mode::k8E1),
     on_packet_cb_(callback),
     after_send_cb_(callback),
     tx_debug_pin_(tx_debug_pin),
@@ -59,21 +57,8 @@ void HalfDuplexChannel::Start() {
     abort();
   }
 
-  const uart_config_t uart_config = {
-    .baud_rate = 2400,
-    .data_bits = UART_DATA_8_BITS,
-    .parity = UART_PARITY_EVEN,
-    .stop_bits = UART_STOP_BITS_1,
-    .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-    .rx_flow_ctrl_thresh = 40,
-    .use_ref_tick = true,
-  };
-  uart_param_config(uart_, &uart_config);
-  uart_set_pin(uart_, tx_pin_, rx_pin_, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-
   // TODO(ajwong): Pick the right sizes and dedup constants with QueueSetHandle_t.
-  constexpr int kBufSize = 128; 
-  uart_driver_install(uart_, kBufSize * 2, kBufSize * 2, kRxQueueLength, &rx_queue_, 0);
+  uart_.Start(&rx_queue_, kRxQueueLength);
 
   // TODO(ajwong): priority should be passed in.
   xTaskCreate(&HalfDuplexChannel::PumpTaskThunk, name_, 4096, this, 4, &pump_task_);
@@ -142,8 +127,7 @@ void HalfDuplexChannel::DoSendPacket() {
     std::unique_ptr<Cn105Packet> packet = std::move(tx_packets_.front());
     tx_packets_.pop();
     SetTxDebug(true);
-    uart_write_bytes(uart_, reinterpret_cast<const char*>(packet->raw_bytes()),
-                     packet->packet_size());
+    uart_.Write(packet->raw_bytes(), packet->packet_size());
     after_send_cb_(std::move(packet));
     vTaskDelay(kBusyMs / portTICK_PERIOD_MS);
     SetTxDebug(false);
@@ -183,7 +167,7 @@ void HalfDuplexChannel::ProcessReceiveEvent(uart_event_t event) {
 
   // This is a data packet. Process it.
   uint8_t* buf = reinterpret_cast<uint8_t*>(alloca(event.size));
-  int bytes = uart_read_bytes(uart_, buf, event.size, 0);
+  int bytes = uart_.Read(buf, event.size);
   if (bytes != event.size) {
     ESP_LOGE(kTag, "Unable to read all bytes in event from UART");
     // TODO(awong): Does this really need to crash?

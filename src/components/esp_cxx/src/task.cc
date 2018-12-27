@@ -2,8 +2,12 @@
 
 #include "esp_cxx/task.h"
 
+#ifdef FAKE_ESP_IDF
+#include <unistd.h>
+#endif
+
 namespace {
-#if FAKE_ESP_IDF
+#ifdef FAKE_ESP_IDF
 void KillSignalHandler(int junk) {
   pthread_exit(0);
 }

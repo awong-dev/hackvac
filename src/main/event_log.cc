@@ -1,4 +1,5 @@
 #include "event_log.h"
+#if 0
 
 #include <atomic>
 #include <string.h>
@@ -121,3 +122,4 @@ void EventLogInit() {
 }
 
 }  // namespace hackvac
+#endif

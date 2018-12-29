@@ -5,8 +5,12 @@
 #include <memory>
 #include <queue>
 
-#include "cn105_packet.h"
+#include "esp_cxx/gpio.h"
+#include "esp_cxx/task.h"
+#include "esp_cxx/queue.h"
 #include "esp_cxx/uart.h"
+
+#include "cn105_packet.h"
 
 namespace hackvac {
 
@@ -55,12 +59,12 @@ class HalfDuplexChannel {
   //     a uart.
   HalfDuplexChannel(const char* name,
                     esp_cxx::Uart::Chip uart_chip,
-                    gpio_num_t tx_pin,
-                    gpio_num_t rx_pin,
+                    esp_cxx::Gpio tx_pin,
+                    esp_cxx::Gpio rx_pin,
                     PacketCallback callback,
                     PacketCallback after_send_cb = PacketCallback(),
-                    gpio_num_t tx_debug_pin = GPIO_NUM_MAX,
-                    gpio_num_t rx_debug_pin = GPIO_NUM_MAX);
+                    esp_cxx::Gpio tx_debug_pin = {},
+                    esp_cxx::Gpio rx_debug_pin = {});
   ~HalfDuplexChannel();
 
   // Starts sending/receiving data from the UART. After this, |on_packet_cb_|
@@ -71,9 +75,6 @@ class HalfDuplexChannel {
   void EnqueuePacket(std::unique_ptr<Cn105Packet> packet);
 
  private:
-  // Simple thunk to adapt the C-style FreeRTOS API to C++.
-  static void PumpTaskThunk(void *pvParameters);
-
   // Runloop for the task that manages sending/receiving packets from
   // |uart_| while maintaining the guarantees of the HalfDuplexChannel.
   void PumpTaskRunloop();
@@ -92,7 +93,7 @@ class HalfDuplexChannel {
   // blocked until the channel is ready for sending/receive again, and then
   // the function returns true. If the UART runs out of data before the packet
   // is complete, return false.
-  void ProcessReceiveEvent(uart_event_t event);
+  void ProcessReceiveEvent(esp_cxx::Uart::Event event);
 
   // Sets the |tx_debug_pin_| to |is_high|.
   void SetTxDebug(bool is_high);
@@ -113,10 +114,10 @@ class HalfDuplexChannel {
   esp_cxx::Uart uart_;
 
   // Pin for UART TX.
-  gpio_num_t tx_pin_ = GPIO_NUM_MAX;
+  esp_cxx::Gpio tx_pin_ = {};
 
   // Pin for UART RX.
-  gpio_num_t rx_pin_ = GPIO_NUM_MAX;
+  esp_cxx::Gpio rx_pin_ = {};
 
   // Callback to invoke when a packet is received.
   PacketCallback on_packet_cb_;
@@ -125,16 +126,16 @@ class HalfDuplexChannel {
   PacketCallback after_send_cb_;
 
   // Pin to hold high when sending a packet.
-  gpio_num_t tx_debug_pin_ = GPIO_NUM_MAX;
+  esp_cxx::Gpio tx_debug_pin_ = {};
 
   // Pin to hold high when receiving a packet.
-  gpio_num_t rx_debug_pin_ = GPIO_NUM_MAX;
+  esp_cxx::Gpio rx_debug_pin_ = {};
 
   // Queue that receives the data from the UART.
-  QueueHandle_t rx_queue_ = nullptr;
+  esp_cxx::Queue rx_queue_;
 
   // Binary Semaphore that signals a send is wanted.
-  QueueHandle_t tx_queue_ = nullptr;
+  esp_cxx::Queue tx_queue_;
 
   // Current packet being received.
   std::unique_ptr<Cn105Packet> current_rx_packet_;
@@ -143,7 +144,7 @@ class HalfDuplexChannel {
   std::queue<std::unique_ptr<Cn105Packet>> tx_packets_;
 
   // Task responsible for reading/sending packets.
-  TaskHandle_t pump_task_ = nullptr;
+  esp_cxx::Task pump_task_;
 };
 
 }  // namespace hackvac

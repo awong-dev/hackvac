@@ -1,21 +1,19 @@
 #include "controller.h"
 
 #include "esp_cxx/uart.h"
-#include "esp_log.h"
+#include "esp_cxx/logging.h"
 #include "event_log.h"
 
 namespace {
 constexpr char kTag[] = "controller";
 
-constexpr gpio_num_t kPacPower = GPIO_NUM_4;
-
 constexpr esp_cxx::Uart::Chip kCn105Uart = esp_cxx::Uart::Chip::kUart1;
-constexpr gpio_num_t kCn105TxPin = GPIO_NUM_18;
-constexpr gpio_num_t kCn105RxPin = GPIO_NUM_19;
+constexpr esp_cxx::Gpio kCn105TxPin = esp_cxx::Gpio::Pin<18>();
+constexpr esp_cxx::Gpio kCn105RxPin = esp_cxx::Gpio::Pin<19>();
 
 constexpr esp_cxx::Uart::Chip kTstatUart = esp_cxx::Uart::Chip::kUart2;
-constexpr gpio_num_t kTstatTxPin = GPIO_NUM_5;
-constexpr gpio_num_t kTstatRxPin = GPIO_NUM_17;
+constexpr esp_cxx::Gpio kTstatTxPin = esp_cxx::Gpio::Pin<5>();
+constexpr esp_cxx::Gpio kTstatRxPin = esp_cxx::Gpio::Pin<17>();
 
 }  // namespace
 
@@ -73,27 +71,20 @@ Controller::Controller()
                 [this](std::unique_ptr<Cn105Packet> packet) {
                   packet_logger_.Log(std::move(packet));
                 },
-                GPIO_NUM_23,
-                GPIO_NUM_22),
-    hvac_packet_rx_queue_(xQueueCreate(10, sizeof(Cn105Packet*))) {  // TODO(awong): Pull out constant.
+                esp_cxx::Gpio::Pin<23>(),
+                esp_cxx::Gpio::Pin<22>()),
+    hvac_packet_rx_queue_(10, sizeof(Cn105Packet*)) {  // TODO(awong): Pull out constant.
 }
 
 Controller::~Controller() {
-  if (control_task_) {
-    vTaskDelete(control_task_);
-  }
-  vQueueDelete(hvac_packet_rx_queue_);
 }
 
 void Controller::Start() {
-  gpio_pad_select_gpio(kPacPower);
-  gpio_set_direction(kPacPower, GPIO_MODE_OUTPUT);
-  gpio_set_level(kPacPower, 1);  // off.
-
   hvac_control_.Start();
   thermostat_.Start();
 
-  xTaskCreate(&Controller::ControlTaskThunk, "controller", 4096, this, 4, &control_task_);
+  control_task_ = esp_cxx::Task::Create<Controller, &Controller::ControlTaskRunloop>(
+      this, "controller", 4096, 4);
 }
 
 void Controller::OnHvacControlPacket(
@@ -108,8 +99,7 @@ void Controller::OnHvacControlPacket(
     // RX queue rather than take a callback. That'd make it symmetrical to the
     // HalfDuplexChannel::EnqueuePacket() API.
     Cn105Packet* raw_packet = hvac_packet.release();
-    xQueueSendToBack(hvac_packet_rx_queue_, &raw_packet,
-                     static_cast<portTickType>(portMAX_DELAY));
+    hvac_packet_rx_queue_.Push(&raw_packet, 99999); // TODO(awong): Figure out max delay in MS.
   }
 }
 
@@ -163,10 +153,6 @@ void Controller::OnThermostatPacket(
   }
 }
 
-void Controller::ControlTaskThunk(void *parameters) {
-  static_cast<Controller*>(parameters)->ControlTaskRunloop();
-}
-
 void Controller::ControlTaskRunloop() {
   bool is_connected_ = false;
   for (;;) {
@@ -186,9 +172,6 @@ void Controller::ControlTaskRunloop() {
     //
     //   In the event of a full timeout, update error count. Send channel reset
     //     sequence (crib for PAC-444CN-1). Then restart connect sequence.
-    //
-    // Wait forever.
-    ulTaskNotifyTake(pdFALSE, portMAX_DELAY);
 
     while (!is_connected_) {
       is_connected_ = DoConnect();
@@ -216,7 +199,7 @@ void Controller::ControlTaskRunloop() {
     }
 
     // Wait 1 second between chatter bursts.
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    esp_cxx::Task::Delay(1000);
   }
 }
 
@@ -279,7 +262,7 @@ std::unique_ptr<Cn105Packet> Controller::AwaitPacketOfType(
 
   Cn105Packet* packet = nullptr;
 
-  while (xQueueReceive(hvac_packet_rx_queue_, &packet, timeout_ms) == pdTRUE) {
+  while (hvac_packet_rx_queue_.Pop(&packet, timeout_ms)) {
     if (packet->type() == type) {
       return std::unique_ptr<Cn105Packet>(packet);
     } else {

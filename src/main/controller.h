@@ -35,9 +35,8 @@
 // packet is internally consistent. It also means updates to the Controller object
 // only get latched into effect at packet boundaries.
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
+#include "esp_cxx/task.h"
+#include "esp_cxx/queue.h"
 
 #include "half_duplex_channel.h"
 
@@ -61,9 +60,6 @@ class Controller {
 
   // Runs on the |thermostat_| channel's message pump task.
   void OnThermostatPacket(std::unique_ptr<Cn105Packet> thermostat_packet);
-
-  // Thunk to invole the ControlTaskRunloop().
-  static void ControlTaskThunk(void *parameters);
 
   // Task that sends updates to the HVAC control unit when settings change.
   void ControlTaskRunloop();
@@ -100,10 +96,10 @@ class Controller {
 
   // Task that publishes settings changes to the HVAC control unit.
   // Does do anything if |is_passthru_|.
-  TaskHandle_t control_task_ = nullptr;
+  esp_cxx::Task control_task_;
 
   // Queue of packets received from |hvac_control_|
-  QueueHandle_t hvac_packet_rx_queue_ = nullptr;
+  esp_cxx::Queue hvac_packet_rx_queue_;
 
   // Asynchronous logger to track protocol interactions.
   esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacketThunk> packet_logger_{"packets"};

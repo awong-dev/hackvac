@@ -1,6 +1,8 @@
 #ifndef ESPCXX_WIFI_H_
 #define ESPCXX_WIFI_H_
 
+#include <string>
+
 #include "esp_cxx/cxx17hack.h"
 
 namespace esp_cxx {

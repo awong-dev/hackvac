@@ -2,7 +2,7 @@
 
 namespace esp_cxx {
 
-Uart::Uart(Chip chip, gpio_num_t tx_pin, gpio_num_t rx_pin,
+Uart::Uart(Chip chip, Gpio tx_pin, Gpio rx_pin,
            int baud_rate, Mode mode)
   : chip_(chip) {
     (void)chip_;
@@ -18,23 +18,25 @@ Uart::Uart(Chip chip, gpio_num_t tx_pin, gpio_num_t rx_pin,
   };
 
   uart_param_config(static_cast<uart_port_t>(chip_), &uart_config);
-  uart_set_pin(static_cast<uart_port_t>(chip_), tx_pin, rx_pin,
+  uart_set_pin(static_cast<uart_port_t>(chip_), tx_pin.underlying(), rx_pin.underlying(),
                UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 #endif
 }
 
-void Uart::Start(QueueHandle_t* rx_queue, size_t rx_queue_length) {
+void Uart::Start(Queue* rx_queue, size_t rx_queue_length) {
 #ifndef FAKE_ESP_IDF
   // TODO(ajwong): Pick the right sizes and dedup constants with QueueSetHandle_t.
   constexpr int kBufSize = 128; 
+  QueueHandle_t queue;
   uart_driver_install(static_cast<uart_port_t>(chip_), kBufSize * 2, kBufSize * 2,
-                      rx_queue_length, rx_queue, 0);
+                      rx_queue_length, &queue, 0);
+  *rx_queue = esp_cxx::Queue(queue);
 #endif
 }
 
 int Uart::Read(uint8_t*buf, size_t size) {
 #ifndef FAKE_ESP_IDF
-  return uart_read_bytes(static_cast<uart_port_t>(uart_), buf, size, 0);
+  return uart_read_bytes(static_cast<uart_port_t>(chip_), buf, size, 0);
 #else
   return 0;
 #endif
@@ -43,7 +45,7 @@ int Uart::Read(uint8_t*buf, size_t size) {
 void Uart::Write(const uint8_t* buf, size_t size) {
 #ifndef FAKE_ESP_IDF
   uart_write_bytes(static_cast<uart_port_t>(chip_),
-                   reinterpret_cast<const char*>(buf)
+                   reinterpret_cast<const char*>(buf),
                    size);
 #endif
 }

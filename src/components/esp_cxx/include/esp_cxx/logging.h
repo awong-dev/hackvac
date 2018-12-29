@@ -12,6 +12,7 @@ constexpr char kEspCxxTag[] = "espcxx";
 #else  // FAKE_ESP_IDF
 
 #include <cstdio>
+#include <cstdint>
 #include <time.h>
 
 #define ESP_LOGD(tag, fmt, args...) fprintf(stderr, "D: %s: " fmt, tag, ##args)

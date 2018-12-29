@@ -2,7 +2,8 @@
 
 #include <alloca.h>
 
-#include "esp_log.h"
+#include "esp_cxx/logging.h"
+
 #include "event_log.h"
 
 namespace hackvac {
@@ -16,39 +17,37 @@ constexpr char kTag[] = "chan";
 
 HalfDuplexChannel::HalfDuplexChannel(const char *name,
                                      esp_cxx::Uart::Chip chip,
-                                     gpio_num_t tx_pin,
-                                     gpio_num_t rx_pin,
+                                     esp_cxx::Gpio tx_pin,
+                                     esp_cxx::Gpio rx_pin,
                                      PacketCallback callback,
                                      PacketCallback after_send_cb,
-                                     gpio_num_t tx_debug_pin,
-                                     gpio_num_t rx_debug_pin)
+                                     esp_cxx::Gpio tx_debug_pin,
+                                     esp_cxx::Gpio rx_debug_pin)
   : name_(name),
     uart_(chip, tx_pin, rx_pin, 2400, esp_cxx::Uart::Mode::k8E1),
     on_packet_cb_(callback),
     after_send_cb_(callback),
     tx_debug_pin_(tx_debug_pin),
     rx_debug_pin_(rx_debug_pin),
-    tx_queue_(xQueueCreate(kTxQueueLength, sizeof(Cn105Packet*))) {
-  if (tx_debug_pin_ != GPIO_NUM_MAX || rx_debug_pin_ != GPIO_NUM_MAX) {
+    tx_queue_(kTxQueueLength, sizeof(Cn105Packet*)) {
+  if (tx_debug_pin_ || rx_debug_pin_) {
+    /*
     gpio_config_t io_conf;
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_OUTPUT;
     io_conf.pin_bit_mask =
-      ((1ULL << tx_debug_pin_) | (1ULL << rx_debug_pin_))
+      ((1ULL << tx_debug_pin_.underlying()) | (1ULL << rx_debug_pin_.underlying()))
       & ((1ULL << GPIO_NUM_MAX) - 1);
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     gpio_config(&io_conf);
     SetTxDebug(false);
     SetRxDebug(false);
+    */
   }
 }
 
 HalfDuplexChannel::~HalfDuplexChannel() {
-  if (pump_task_) {
-    vTaskDelete(pump_task_);
-  }
-  vQueueDelete(tx_queue_);
 }
 
 void HalfDuplexChannel::Start() {
@@ -60,40 +59,33 @@ void HalfDuplexChannel::Start() {
   // TODO(ajwong): Pick the right sizes and dedup constants with QueueSetHandle_t.
   uart_.Start(&rx_queue_, kRxQueueLength);
 
-  // TODO(ajwong): priority should be passed in.
-  xTaskCreate(&HalfDuplexChannel::PumpTaskThunk, name_, 4096, this, 4, &pump_task_);
+  // TODO(ajwong): priority should be passed in. Reevaluate stack size.
+  pump_task_ = esp_cxx::Task::Create<HalfDuplexChannel, &HalfDuplexChannel::PumpTaskRunloop>(this, name_, 4096, 4);
 }
 
 void HalfDuplexChannel::EnqueuePacket(std::unique_ptr<Cn105Packet> packet) {
   // TODO(ajwong): Should this be a blocking call or should there be at timeout?
   Cn105Packet* raw_packet = packet.release();
-  xQueueSendToBack(tx_queue_, &raw_packet,
-                   static_cast<portTickType>(portMAX_DELAY));
-}
-
-// static
-void HalfDuplexChannel::PumpTaskThunk(void *pvParameters) {
-  static_cast<HalfDuplexChannel*>(pvParameters)->PumpTaskRunloop();
+  tx_queue_.Push(&raw_packet, esp_cxx::Queue::kMaxWait);
 }
 
 void HalfDuplexChannel::PumpTaskRunloop() {
   // TODO(ajwong): Incorrect queue size.
-  QueueSetHandle_t queue_set = xQueueCreateSet(kRxQueueLength + kTxQueueLength);
-  xQueueAddToSet(rx_queue_, queue_set);
-  xQueueAddToSet(tx_queue_, queue_set);
+  esp_cxx::QueueSet queue_set(kRxQueueLength + kTxQueueLength);
+  queue_set.Add(&rx_queue_);
+  queue_set.Add(&tx_queue_);
 
   for (;;) {
-    QueueSetMemberHandle_t active_member = 
-      xQueueSelectFromSet(queue_set, (kBusyMs * 3) / portTICK_PERIOD_MS);
-    if (active_member == tx_queue_) {
+    esp_cxx::Queue::Id active_member = queue_set.Select(kBusyMs * 3);
+    if (tx_queue_.IsId(active_member)) {
       Cn105Packet* packet = nullptr;
-      xQueueReceive(active_member, &packet, 0);
+      tx_queue_.Pop(&packet);
       if (packet) {
         tx_packets_.emplace(packet);
       }
-    } else if (active_member == rx_queue_) {
-      uart_event_t event;
-      xQueueReceive(rx_queue_, &event, 0);
+    } else if (rx_queue_.IsId(active_member)) {
+      esp_cxx::Uart::Event event;
+      rx_queue_.Pop(&event);
       ProcessReceiveEvent(event);
     } else {
       // This is a timeout.
@@ -129,7 +121,7 @@ void HalfDuplexChannel::DoSendPacket() {
     SetTxDebug(true);
     uart_.Write(packet->raw_bytes(), packet->packet_size());
     after_send_cb_(std::move(packet));
-    vTaskDelay(kBusyMs / portTICK_PERIOD_MS);
+    esp_cxx::Task::Delay(kBusyMs);
     SetTxDebug(false);
   }
 }
@@ -139,28 +131,28 @@ void HalfDuplexChannel::DispatchRxPacket() {
   SetRxDebug(false);
 }
 
-void HalfDuplexChannel::ProcessReceiveEvent(uart_event_t event) {
+void HalfDuplexChannel::ProcessReceiveEvent(esp_cxx::Uart::Event event) {
   switch (event.type) {
-    case UART_FRAME_ERR:
-    case UART_PARITY_ERR:
+    case esp_cxx::Uart::UART_FRAME_ERR:
+    case esp_cxx::Uart::UART_PARITY_ERR:
       if (current_rx_packet_) {
         current_rx_packet_->IncrementErrorCount();
       }
 
-    case UART_BREAK:
-    case UART_DATA_BREAK:
-    case UART_BUFFER_FULL:
-    case UART_FIFO_OVF:
+    case esp_cxx::Uart::UART_BREAK:
+    case esp_cxx::Uart::UART_DATA_BREAK:
+    case esp_cxx::Uart::UART_BUFFER_FULL:
+    case esp_cxx::Uart::UART_FIFO_OVF:
       if (current_rx_packet_) {
         current_rx_packet_->IncrementUnexpectedEventCount();
       }
       return;
 
-    case UART_DATA:
+    case esp_cxx::Uart::UART_DATA:
       break;
 
-    case UART_PATTERN_DET:
-    case UART_EVENT_MAX:
+    case esp_cxx::Uart::UART_PATTERN_DET:
+    case esp_cxx::Uart::UART_EVENT_MAX:
       ESP_LOGE(kTag, "Fatal: Impossible UART event.");
       abort();
   }
@@ -202,20 +194,20 @@ void HalfDuplexChannel::ProcessReceiveEvent(uart_event_t event) {
     if (current_rx_packet_->IsComplete()) {
       ESP_LOGI(kTag, "p d: %p", current_rx_packet_.get());
       DispatchRxPacket();
-      vTaskDelay(kBusyMs / portTICK_PERIOD_MS);
+      esp_cxx::Task::Delay(kBusyMs);
     }
   }
 }
 
 void HalfDuplexChannel::SetTxDebug(bool is_high) {
-  if (tx_debug_pin_ != GPIO_NUM_MAX) {
-    ESP_ERROR_CHECK(gpio_set_level(tx_debug_pin_, is_high));
+  if (tx_debug_pin_) {
+    tx_debug_pin_.Set(is_high);
   }
 }
 
 void HalfDuplexChannel::SetRxDebug(bool is_high) {
-  if (rx_debug_pin_ != GPIO_NUM_MAX) {
-    ESP_ERROR_CHECK(gpio_set_level(rx_debug_pin_, is_high));
+  if (rx_debug_pin_) {
+    rx_debug_pin_.Set(is_high);
   }
 }
 

@@ -1,24 +1,21 @@
 #include "cpp_entry.h"
 
-#include "constants.h"
 #include "controller.h"
 #include "event_log.h"
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
-#include "esp_log.h"
+#ifndef FAKE_ESP_IDF
 #include "esp_ota_ops.h"
 #include "esp_spi_flash.h"
 #include "esp_system.h"
-
 #include "nvs_flash.h"
+#endif
 
-#include "driver/gpio.h"
-
+#include "esp_cxx/gpio.h"
 #include "esp_cxx/httpd/http_server.h"
 #include "esp_cxx/httpd/standard_endpoints.h"
+#include "esp_cxx/logging.h"
 #include "esp_cxx/ota.h"
+#include "esp_cxx/task.h"
 #include "esp_cxx/wifi.h"
 
 #define HTML_DECL(name) \
@@ -30,33 +27,36 @@
 HTML_DECL(resp404_html);
 HTML_DECL(index_html);
 
+constexpr esp_cxx::Gpio kBlinkGpio = esp_cxx::Gpio::Pin<2>();
+
 static const char *kTag = "hackvac";
 
-void blink_task(void* parameters) {
+void blink_task_func(void* parameters) {
   static const int BLINK_DELAY_MS = 5000;
-  gpio_pad_select_gpio(hackvac::BLINK_GPIO);
+//  gpio_pad_select_gpio(hackvac::BLINK_GPIO);
   /* Set the GPIO as a push/pull output */
-  gpio_set_direction(hackvac::BLINK_GPIO, GPIO_MODE_OUTPUT);
+//  gpio_set_direction(hackvac::BLINK_GPIO, GPIO_MODE_OUTPUT);
   for (;;) {
       /* Blink off (output low) */
-      gpio_set_level(hackvac::BLINK_GPIO, 0);
-      vTaskDelay(BLINK_DELAY_MS / portTICK_PERIOD_MS);
+      kBlinkGpio.Set(false);
+      esp_cxx::Task::Delay(BLINK_DELAY_MS);
       /* Blink on (output high) */
-      gpio_set_level(hackvac::BLINK_GPIO, 1);
-      vTaskDelay(BLINK_DELAY_MS / portTICK_PERIOD_MS);
+      kBlinkGpio.Set(true);
+      esp_cxx::Task::Delay(BLINK_DELAY_MS);
   }
 }
 
-void uptime_task(void* parameters) {
-  static const int UPTIME_S = 10;
+void uptime_task_func(void* parameters) {
+  static constexpr int kUpdatePublishSec = 10;
   int counter = 0;
   for (;;) {
-    ESP_LOGI(kTag, "uptime: %ds\n", (counter++) * UPTIME_S);
-    vTaskDelay(UPTIME_S * 1000 / portTICK_PERIOD_MS);
+    ESP_LOGI(kTag, "uptime: %ds\n", (counter++) * kUpdatePublishSec);
+    esp_cxx::Task::Delay(kUpdatePublishSec * 1000);
   }
 }
 
 static void dump_chip_info() {
+#ifndef FAKE_ESP_IDF
   /* Print chip information */
   esp_chip_info_t chip_info;
   esp_chip_info(&chip_info);
@@ -71,9 +71,11 @@ static void dump_chip_info() {
 	 (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
   fflush(stdout);
+#endif
 }
 
 static void dump_ota_boot_info() {
+#ifndef FAKE_ESP_IDF
   const esp_partition_t *configured = esp_ota_get_boot_partition();
   const esp_partition_t *running = esp_ota_get_running_partition();
 
@@ -84,6 +86,7 @@ static void dump_ota_boot_info() {
   }
   ESP_LOGI(kTag, "Running partition type %d subtype %d (offset 0x%08x)",
            running->type, running->subtype, running->address);
+#endif
 }
 
 void cpp_entry() {
@@ -94,16 +97,18 @@ void cpp_entry() {
   EventLogInit();
 
   // Initialize NVS
+#ifndef FAKE_ESP_IDF
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
     ESP_ERROR_CHECK(nvs_flash_erase());
     ret = nvs_flash_init();
   }
   ESP_ERROR_CHECK(ret);
+#endif
 
   // Silly debug tasks.
-  xTaskCreate(&blink_task, "blink_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-  xTaskCreate(&uptime_task, "uptime_task", 4096, NULL, 1, NULL);
+  esp_cxx::Task blink_task(&blink_task_func, nullptr, "blink_task");
+  esp_cxx::Task uptime_task(&uptime_task_func, nullptr, "uptime_task");
   esp_cxx::RunOtaWatchdog();
 
   // Setup Wifi access.

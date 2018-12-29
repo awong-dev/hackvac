@@ -16,7 +16,12 @@ namespace esp_cxx {
 // RAII class for opening up an NVS handle.
 class TaskRef {
  public:
-#if FAKE_ESP_IDF
+#ifndef FAKE_ESP_IDF
+  using PriorityType = UBaseType_t;
+  using TaskHandle = TaskHandle_t;
+  static constexpr unsigned short kDefaultStackSize = XT_STACK_MIN_SIZE + XT_STACK_EXTRA_CLIB;
+  static constexpr PriorityType kDefaultPrio = ESP_TASK_MAIN_PRIO;
+#else
   using PriorityType = int;
   using TaskHandle = pthread_t;
   static constexpr unsigned short kDefaultStackSize = 1024;
@@ -24,11 +29,6 @@ class TaskRef {
   // 1 is low and 99 is max for Linux SCHED_FIFO which is closes to
   // FreeRTOS's static priority based scheduling.
   static constexpr PriorityType kDefaultPrio = 1;
-#else  // FAKE_ESP_IDF
-  using PriorityType = UBaseType_t;
-  using TaskHandle = TaskHandle_t;
-  static constexpr unsigned short kDefaultStackSize = XT_STACK_MIN_SIZE + XT_STACK_EXTRA_CLIB;
-  static constexpr PriorityType kDefaultPrio = ESP_TASK_MAIN_PRIO;
 #endif  // FAKE_ESP_IDF
 
   TaskRef() = default;
@@ -66,6 +66,8 @@ class TaskRef {
 
   // Sleeps the current thread for |delay_ms|.
   static void Delay(int delay_ms);
+
+  explicit operator bool() const { return !!task_handle_; }
 
  protected:
   TaskHandle task_handle_{};

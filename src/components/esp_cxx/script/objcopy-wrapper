@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# The command format 
+#    objcopy --input-target binary --output-target elf32-xtensa-le --binary-architecture xtensa --rename-section .data=.rodata.embedded index.html ../index.html.txt.o
+#
+# The last argument is the output object file and the second to last is the source file.
+#
+# Should result in a object file with an .rodata.embedded section (in mac, it should be in the
+# .const segment) that contains the file contents. There should then be 3 symbols defined
+# for ${NAME}_start ${NAME}_end ${NAME}_size where NAME is a transform of the input filename
+# that generates a valid label in the object file.
+
+if [ "$V" == 1 ]; then
+  set -x
+fi
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+OUTFILE="${@:$#:1}"
+INFILE="${@:$#-1:1}"
+SYMBASE=$(echo $(basename $INFILE) | sed -e 's/[\.\/ ]/_/g')
+
+as -o "$OUTFILE" - <<ENDEND
+.text
+.section .const,.rodata.embedded
+
+.globl ${SYMBASE}_start;
+.globl ${SYMBASE}_end;
+.globl ${SYMBASE}_size;
+
+${SYMBASE}_start: .incbin "$INFILE"
+${SYMBASE}_end = .
+${SYMBASE}_size = ${SYMBASE}_end - ${SYMBASE}_start
+ENDEND
+
+else
+# Assume Linux.
+objcopy "$@"
+fi

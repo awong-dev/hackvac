@@ -1,5 +1,5 @@
 #include "event_log.h"
-#if 0
+#ifndef FAKE_ESP_IDF
 
 #include <atomic>
 #include <string.h>
@@ -121,5 +121,9 @@ void EventLogInit() {
   g_publish_task = publish_task;
 }
 
+}  // namespace hackvac
+#else
+namespace hackvac {
+void EventLogInit() {}
 }  // namespace hackvac
 #endif

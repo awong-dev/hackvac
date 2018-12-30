@@ -11,11 +11,15 @@ include Makefile
 ## Modify CFLAGS, CXXFLAGS, CPPFLAGS, and LDFLAGS after Makefile has set them.
 HOST_EXCLUDED_CFLAGS := -fstrict-volatile-bitfields -mlongcalls -Wno-error=unused-but-set-variable -Wno-old-style-declaration
 # TODO(awong): Wno-format is unfortnate.
-EXTRA_CFLAGS := -DFAKE_ESP_IDF=1 -Wno-format
-CXXFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CXXFLAGS)) $(EXTRA_CFLAGS) -std=c++17 
-CFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CFLAGS)) $(EXTRA_CFLAGS)
+EXTRA_CFLAGS := -DHOST_BUILD=1 -DFAKE_ESP_IDF=1 -Wno-format
+CXXFLAGS := -I$(abspath ./override) $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CXXFLAGS)) $(EXTRA_CFLAGS) -std=c++17 
+CFLAGS := -I$(abspath ./override) $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CFLAGS)) $(EXTRA_CFLAGS)
 
 HOST_EXCLUDED_CPPFLAGS := -DMBEDTLS_CONFIG_FILE='"mbedtls/esp_config.h"'
 CPPFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CPPFLAGS))
 LDFLAGS := -pthreads
 OBJCOPY = $(ESPCXX_HOST_OBJCOPY_WRAPPER)
+
+$(BUILD_DIR_BASE)/hackvac_host: $(foreach libcomp,$(COMPONENT_LIBRARIES),$(BUILD_DIR_BASE)/$(libcomp)/lib$(libcomp).a)
+	$(summary) LD $(patsubst $(PWD)/%,%,$@)
+	$(CXX) $(LDFLAGS) -o $@ $^

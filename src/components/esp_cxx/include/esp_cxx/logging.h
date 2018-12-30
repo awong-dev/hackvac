@@ -30,7 +30,7 @@ typedef enum {
     ESP_LOG_VERBOSE     /*!< Bigger chunks of debugging information, or frequent messages which can potentially flood the output. */
 } esp_log_level_t;
 
-uint32_t esp_log_timestamp() { return time(NULL); }
+static inline uint32_t esp_log_timestamp() { return time(NULL); }
 
 #endif  // FAKE_ESP_IDF
 

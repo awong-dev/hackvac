@@ -2,6 +2,8 @@
 
 namespace esp_cxx {
 
+Gpio::Gpio() = default;
+
 bool Gpio::Get() const {
 #ifndef FAKE_ESP_IDF
   return gpio_get_level(underlying());

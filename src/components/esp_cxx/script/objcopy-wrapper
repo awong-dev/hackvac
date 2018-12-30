@@ -17,7 +17,7 @@ fi
 if [[ "$OSTYPE" == "darwin"* ]]; then
 OUTFILE="${@:$#:1}"
 INFILE="${@:$#-1:1}"
-SYMBASE=$(echo $(basename $INFILE) | sed -e 's/[\.\/ ]/_/g')
+SYMBASE=_binary_$(echo $(basename $INFILE) | sed -e 's/[\.\/ ]/_/g')
 
 as -o "$OUTFILE" - <<ENDEND
 .text

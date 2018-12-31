@@ -96,7 +96,11 @@ void TaskRef::Delay(int delay_ms) {
 #ifndef FAKE_ESP_IDF
   vTaskDelay(delay_ms / portTICK_PERIOD_MS);
 #else
-  sleep(delay_ms);
+  struct timespec delay_spec = {
+    delay_ms / 1000,
+    (delay_ms % 1000) * 1000,
+  };
+  while (nanosleep(&delay_spec, &delay_spec) != 0);
 #endif
 }
 

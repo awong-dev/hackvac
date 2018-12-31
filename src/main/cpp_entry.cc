@@ -47,7 +47,7 @@ void blink_task_func(void* parameters) {
 }
 
 void uptime_task_func(void* parameters) {
-  static constexpr int kUpdatePublishSec = 10;
+  static constexpr int kUpdatePublishSec = 1;
   int counter = 0;
   for (;;) {
     ESP_LOGI(kTag, "uptime: %ds\n", (counter++) * kUpdatePublishSec);
@@ -122,7 +122,7 @@ void cpp_entry() {
 
   // Initialize hackvac controller.
   static hackvac::Controller controller;
-  controller.Start();
+  //controller.Start();
 
   // Run webserver.
   std::string_view index_html(
@@ -131,10 +131,13 @@ void cpp_entry() {
   std::string_view resp404_html(
       reinterpret_cast<const char*>(HTML_CONTENTS(resp404_html)),
       HTML_LEN(resp404_html));
-  esp_cxx::HttpServer http_server("httpd", ":80", resp404_html);
+  esp_cxx::HttpServer http_server("httpd", ":8080", resp404_html);
   esp_cxx::StandardEndpoints standard_endpoints(index_html);
   standard_endpoints.RegisterEndpoints(&http_server);
   http_server.Start();
 
   // TODO(awong): Add idle task hook ot sleep. Use hte ESP32-IDF hooks and don't create a task directly.
+  for (;;) {
+    sleep(1000);
+  }
 }

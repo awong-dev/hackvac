@@ -99,7 +99,7 @@ void HttpServer::RegisterEndpoint(const char* path_pattern, Endpoint* endpoint) 
 
 void HttpServer::EventPumpRunLoop() {
   for(;;) {
-    mg_mgr_poll(&event_manager_, 10000);
+    mg_mgr_poll(&event_manager_, 1000000);
   }
 }
 
@@ -121,9 +121,9 @@ void HttpServer::DefaultHandlerThunk(struct mg_connection *nc,
                      HttpResponse::kContentTypeHtml);
         mg_send(nc, self->resp404_html_.data(), self->resp404_html_.size());
       }
+      nc->flags |= MG_F_SEND_AND_CLOSE;
     }
   }
-  nc->flags |= MG_F_SEND_AND_CLOSE;
 }
 
 }  // namespace esp_cxx

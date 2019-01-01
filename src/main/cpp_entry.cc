@@ -122,7 +122,7 @@ void cpp_entry() {
 
   // Initialize hackvac controller.
   static hackvac::Controller controller;
-  //controller.Start();
+  controller.Start();
 
   // Run webserver.
   std::string_view index_html(

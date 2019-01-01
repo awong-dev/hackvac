@@ -1,5 +1,7 @@
 #include "esp_cxx/queue.h"
 
+#include "esp_cxx/task.h"
+
 namespace esp_cxx {
 
 Queue::Queue() = default;
@@ -26,7 +28,7 @@ bool Queue::Push(const void* obj, int timeout_ms) {
 #ifndef FAKE_ESP_IDF
   return xQueueSend(queue_, obj, timeout_ms / portTICK_PERIOD_MS) == pdTRUE;
 #else
-//  assert(false);
+  Task::Delay(timeout_ms * 1000); // TODO(awong): Fix.
   return false;
 #endif
 }
@@ -35,7 +37,7 @@ bool Queue::Peek(void* obj, int timeout_ms) const {
 #ifndef FAKE_ESP_IDF
   return xQueuePeek(queue_, obj, timeout_ms / portTICK_PERIOD_MS) == pdTRUE;
 #else
-  assert(false);
+  Task::Delay(timeout_ms * 1000); // TODO(awong): Fix.
   return false;
 #endif
 }
@@ -44,7 +46,7 @@ bool Queue::Pop(void* obj, int timeout_ms) {
 #ifndef FAKE_ESP_IDF
   return xQueueReceive(queue_, obj, timeout_ms / portTICK_PERIOD_MS) == pdTRUE;
 #else
-//  assert(false);
+  Task::Delay(timeout_ms);
   return false;
 #endif
 }
@@ -75,6 +77,7 @@ Queue::Id QueueSet::Select(int timeout_ms) {
   return reinterpret_cast<Queue::Id>(
       xQueueSelectFromSet(queue_set_, timeout_ms / portTICK_PERIOD_MS));
 #else
+  Task::Delay(timeout_ms * 1000); // TODO(awong): Fix.
   return {};
 #endif
 }

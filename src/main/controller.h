@@ -62,7 +62,7 @@ class Controller {
   void OnThermostatPacket(std::unique_ptr<Cn105Packet> thermostat_packet);
 
   // Task that sends updates to the HVAC control unit when settings change.
-  void ControlTaskRunloop();
+  void ControlTaskRunLoop();
 
   // Attempts connect sequence. Returns on a successful ack.
   bool DoConnect();

@@ -83,7 +83,7 @@ void Controller::Start() {
   hvac_control_.Start();
   thermostat_.Start();
 
-  control_task_ = esp_cxx::Task::Create<Controller, &Controller::ControlTaskRunloop>(
+  control_task_ = esp_cxx::Task::Create<Controller, &Controller::ControlTaskRunLoop>(
       this, "controller", 4096, 4);
 }
 
@@ -153,7 +153,7 @@ void Controller::OnThermostatPacket(
   }
 }
 
-void Controller::ControlTaskRunloop() {
+void Controller::ControlTaskRunLoop() {
   bool is_connected_ = false;
   for (;;) {
     // TODO(awong):

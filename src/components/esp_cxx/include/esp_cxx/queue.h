@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <utility>
+#include <limits>
 
 #ifndef FAKE_ESP_IDF
 #include "freertos/FreeRTOS.h"
@@ -16,7 +17,9 @@ namespace esp_cxx {
 class Queue {
  public:
   using Id = intptr_t;
-  static constexpr int kMaxWait = -1; // TODO(awong): Fix to be actual max.
+  // TODO(awong): Fix to be actual max. And make sure to stop the hokey kScaleDelay
+  // in queue.cc otherwise this will infinite loop.
+  static constexpr int kMaxWait = 99999;
 
   Queue();
   Queue(int num_elements, size_t element_size);

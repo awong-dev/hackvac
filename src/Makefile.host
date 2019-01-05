@@ -22,4 +22,4 @@ OBJCOPY = $(ESPCXX_HOST_OBJCOPY_WRAPPER)
 
 $(BUILD_DIR_BASE)/hackvac_host: $(foreach libcomp,$(COMPONENT_LIBRARIES),$(BUILD_DIR_BASE)/$(libcomp)/lib$(libcomp).a)
 	$(summary) LD $(patsubst $(PWD)/%,%,$@)
-	$(CXX) $(LDFLAGS) -o $@ $^
+	$(CXX) $(LDFLAGS) -o $@ $(COMPONENT_LDFLAGS)

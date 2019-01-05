@@ -73,6 +73,8 @@ class HttpServer {
     RegisterEndpoint(path_pattern, &endpoint);
   }
 
+  mg_mgr& event_manager() { return event_manager_; }
+
  private:
   // Pumps events for the http server.
   void EventPumpRunLoop();

@@ -11,6 +11,8 @@
 #define MG_ENABLE_HTTP_WEBSOCKET 1
 #define MG_ENABLE_CALLBACK_USERDATA 1
 #define MG_ENABLE_BROADCAST 1
+#define MG_ENABLE_SSL 1
+#define MG_SSL_IF MG_SSL_IF_MBEDTLS
 
 #include "../src/mongoose.h"
 

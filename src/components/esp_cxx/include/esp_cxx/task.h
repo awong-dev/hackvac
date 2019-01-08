@@ -5,6 +5,8 @@
 
 #if FAKE_ESP_IDF
 #include <pthread.h>
+#include <mutex>
+#include <condition_variable>
 #else  // FAKE_ESP_IDF
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -57,6 +59,7 @@ class TaskRef {
 
   // Notifies the task.
   void Notify();
+  void Wait();
 
   // Stop the task.
   void Stop();
@@ -73,6 +76,12 @@ class TaskRef {
   TaskHandle task_handle_{};
 
  private:
+#ifdef FAKE_ESP_IDF
+  std::mutex notification_lock_{};
+  std::condition_variable notification_cv_{};
+  bool is_notified_ = false;
+#endif
+
   TaskRef(TaskRef&) = delete;
   void operator=(TaskRef&) = delete;
 };

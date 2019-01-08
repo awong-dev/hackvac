@@ -70,7 +70,9 @@ void TaskRef::Notify() {
 #ifndef FAKE_ESP_IDF
   xTaskNotify(task_handle_, 0, eNoAction);
 #else  // FAKE_ESP_IDF
-  // TODO(awong): Signal!
+  std::unique_lock<std::mutex> lock(notification_lock_);
+  is_notified_ = true;
+  notification_cv_.notify_all();
 #endif  // FAKE_ESP_IDF
 }
 
@@ -84,12 +86,19 @@ void TaskRef::Stop() {
   }
 }
 
-void TaskRef::CurrentTaskWait() {
+void TaskRef::Wait() {
 #ifndef FAKE_ESP_IDF
   xTaskNotifyWait(0x00, ULONG_MAX, NULL, portMAX_DELAY);
 #else  // FAKE_ESP_IDF
-  // TODO(awong): Sleep!
-#endif  // FAKE_ESP_IDF
+  // TODO(awong): This emulation is incorrect as each TaskRef
+  // object has a different notification condition variable
+  // rather than a shared one.
+  std::unique_lock<std::mutex> lock(notification_lock_);
+  while (!is_notified_) {
+    notification_cv_.wait(lock);
+  }
+  is_notified_ = false;
+#endif
 }
 
 void TaskRef::Delay(int delay_ms) {

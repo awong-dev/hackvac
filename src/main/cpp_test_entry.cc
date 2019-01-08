@@ -16,9 +16,11 @@ void cpp_test_entry() {
   // no need for calling testing::InitGoogleTest() separately.
   testing::InitGoogleMock(&argc, argv);
   int result = RUN_ALL_TESTS();
-  ESP_LOGI("TestMain", "Test result %d", result);
+  ESP_LOGI("TestMain", "Test result %d\n", result);
   
+#ifndef FAKE_ESP_IDF
   for (;;) {
     sleep(1000);
   }
+#endif
 }

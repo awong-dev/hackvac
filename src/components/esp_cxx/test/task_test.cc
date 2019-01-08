@@ -25,6 +25,6 @@ void TaskMain(void* param) {
 TEST(Task, Basic) {
   TaskData data;
   esp_cxx::Task t(&TaskMain, &data, "test");
-  Task::CurrentTaskWait();
+  data.handle_.Wait();
   ASSERT_TRUE(data.flag);
 }

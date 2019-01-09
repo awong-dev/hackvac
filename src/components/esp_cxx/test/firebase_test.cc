@@ -93,7 +93,8 @@ TEST(Firebase, Connect) {
                 NULL,
                 //"wss://test-ns.firebaseio.com/.ws?v=5&ls=test", 
                 //"ws://test-ns.firebaseio.com/.ws?v=5&ls=test", 
-			 "wss://demos.kaazing.com/echo",
+			 //"wss://demos.kaazing.com/echo",
+                "wss://anger2action-f3698.firebaseio.com/.ws?v=5&ns=anger2action-f3698",
                 NULL,
                 NULL)) {
     printf("connected.\n");

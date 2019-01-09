@@ -54,9 +54,10 @@ class WebsocketChannel {
  public:
   WebsocketChannel(const char* name, const char* ws_url);
   ~WebsocketChannel();
+  using OnFrameCb = void (*)(WebsocketFrame frame);
 
   // Starts the websocket connection.
-  void Start();
+  void Start(OnFrameCb on_frame_cb);
 
  private:
   void OnWsEvent(mg_connection *new_connection, int event, websocket_message *ev_data);

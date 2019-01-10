@@ -1,0 +1,72 @@
+{"t":"d","d":{"r":1,"a":"s","b":{"c":{"esp32_cxx_firebase":1}}}}
+
+{"t":"d","d":{"r":3,"a":"q","b":{"p":"/","h":""}}}
+
+Structure:
+Envelope:
+{
+  "t": "d", # type. c, d, "c" is from server indicate connection. "d" is both directions indicating data.
+  "d": Body of request. Usally another json dict.
+}
+
+Keepalive
+Raw "0" ever 45000 ms. "1" also works. "2" does not. No response is given.
+Why not use a conrol frame ping? Maybe cause the pong isn't worth it?
+-----
+
+Connect request - "c"
+{
+  t: "h" # "h" means connected. "r" is from server for redirect to different URL.
+  d: connection data
+}
+
+Connect Data - "r"
+{
+  d: "server.url"  # Hostname of server that should be used for the requested database.
+}
+
+Connect Data - "h"
+{
+  h: "server.url"  # Actual Hostname of server. Most firebase urls with the app name aren't the real server name. This is.
+  s: "dkfjewf"     # Some random string. Assumign it's a session id.
+  v: "5"           # Probably a protocol version number.
+  ts: 12345        # Timestamp from the server. Yay.
+}
+
+---------
+
+Data request
+{
+  "r": 1  # Identifier that is echoed back. Allows responses to be matched up to requests. Usually a continuously incrementing int. Negative nums seem to work.
+  "a": "p" # Action. p,d,s,q,auth.
+               "p" is publish from client -> server.
+               "d" is data from server to client.
+                auth is obviously auth.
+               "s" is statistics. Basically publishing our equiv of a user-agent/library version string.
+               "q" is query. Listens for changes on a path. Effectively the "subscribe." Multiple subscriptions will yield multiple updates the server w/o dedupping.
+  "b": Data Request body. Json 
+}
+
+Data Request body --  "p"
+{
+  "p": "/path/to/change"  # The path in the DB. You don't have to be subscribed to change things.
+  "d": newvalue  # The new value. Whatever that is.
+  "h": hash of some sort  # Usually this is empty string. But it looks also like transactions use it? Guessing hash of prior state?
+}
+
+Data Request body --  "d"
+{
+  "p": "/path/to/change"  # The path in the DB. You don't have to be subscribed to change things.
+  "d": newvalue  # The new value. Whatever that is.
+}
+
+Data Request body --  "q"
+{
+  "p": "/path/to/listen"  # The path in the DB. You start getting "d" updates for everything underneath.
+  "h": hash of some sort  # Usually this is empty string.
+}
+
+Data Request body --  "auth"
+{
+  "cred": Some huge token. # Dunno what this is. Guessing it's a base-64 encoded oauth access token, but it seems too long.
+}

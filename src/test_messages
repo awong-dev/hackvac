@@ -2,6 +2,8 @@
 
 {"t":"d","d":{"r":3,"a":"q","b":{"p":"/","h":""}}}
 
+Read: packages/database/src/core/PersistentConnection.ts
+
 Structure:
 Envelope:
 {
@@ -64,6 +66,11 @@ Data Request body --  "q"
 {
   "p": "/path/to/listen"  # The path in the DB. You start getting "d" updates for everything underneath.
   "h": hash of some sort  # Usually this is empty string.
+}
+
+Data Request body --  "n"
+{
+  "p": "/path/to/unlisten"  # The path in the DB. This stops getting "d" updates for this path.
 }
 
 Data Request body --  "auth"

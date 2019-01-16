@@ -1,6 +1,8 @@
 #ifndef ESPCXX_HTTPD_WEBSOCKET_H_
 #define ESPCXX_HTTPD_WEBSOCKET_H_
 
+#include <string>
+
 #include "esp_cxx/cxx17hack.h"
 #include "esp_cxx/httpd/util.h"
 #include "esp_cxx/task.h"
@@ -8,6 +10,7 @@
 #include "mongoose.h"
 
 namespace esp_cxx {
+class EventManager;
 
 // Based directly on the RFC Websocket protocol.
 // https://tools.ietf.org/html/rfc6455#page-65
@@ -52,36 +55,34 @@ class WebsocketSender {
 
 class WebsocketChannel {
  public:
-  WebsocketChannel(const char* name, const char* ws_url);
+  WebsocketChannel(EventManager* event_manager, const std::string& ws_url);
   ~WebsocketChannel();
   using OnFrameCb = void (*)(WebsocketFrame frame);
 
   // Starts the websocket connection.
-  void Start(OnFrameCb on_frame_cb);
+  bool Connect(OnFrameCb on_frame_cb);
+
+  template <typename T, void (T::*)(WebsocketFrame frame)>
+  void Connect(T* ptr) {
+    //
+  }
 
  private:
   void OnWsEvent(mg_connection *new_connection, int event, websocket_message *ev_data);
   static void OnWsEventThunk(mg_connection *new_connection, int event,
                              void *ev_data, void *user_data);
-  void EventPumpRunLoop();
 
   void (*on_frame_cb_)(WebsocketFrame frame) = nullptr;
 
-  // Name for pump task.
-  const char* name_;
+  // Event manager for all connections on this HTTP server.
+  EventManager* event_manager_;
 
   // URL to connect to.
-  const char* ws_url_;
-
-  // Event manager for all connections on this HTTP server.
-  mg_mgr event_manager_;
+  std::string ws_url_;
 
   // Keeps track of the current connection. Allows for sending. If null, then
   // server should reconnect.
   mg_connection* connection_ = nullptr;
-
-  // Handle of event pump task.
-  Task pump_task_;
 };
 
 }  // namespace esp_cxx

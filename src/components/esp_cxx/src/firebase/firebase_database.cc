@@ -1,6 +1,10 @@
 #include "esp_cxx/firebase/firebase_database.h"
+#include "esp_cxx/logging.h"
 
 #include "cJSON.h"
+extern "C" {
+#include "cJSON_Utils.h"
+}
 
 namespace esp_cxx {
 
@@ -13,7 +17,8 @@ FirebaseDatabase::FirebaseDatabase(
     database_(database),
     listen_path_(listen_path),
     websocket_(event_manager,
-               "wss://" + host_ + "/.ws?v=5&ns=" + database_) {
+               "wss://" + host_ + "/.ws?v=5&ns=" + database_),
+    root_(cJSON_CreateObject()) {
 }
 
 FirebaseDatabase::~FirebaseDatabase() {
@@ -35,42 +40,33 @@ cJSON* FirebaseDatabase::Get(const std::string& path) {
   return node;
 }
 
-void FirebaseDatabase::GetPath(const std::string& path, cJSON** parent, cJSON** node,
-                               bool create_parent_path) {
-  *parent = nullptr;
-  *node = nullptr;
-  if (path.empty()) {
-    return;
-  }
+void FirebaseDatabase::GetPath(const std::string& path, cJSON** parent_out, cJSON** node_out,
+                               bool create_path, std::optional<std::string*> last_key_out) {
+  static constexpr char kPathSeparator[] = "/";
+
+  cJSON* parent = nullptr;
+  cJSON* cur = root_.get();
 
   unique_C_ptr<char> path_copy(strdup(path.c_str()));
-  static constexpr char kPathSeparator[] = "/";
-  for (const char* key = strtok(path_copy.get(), kPathSeparator),
-                 * last_key = nullptr;
+  const char* last_key = nullptr;
+  for (const char* key = strtok(path_copy.get(), kPathSeparator);
        key;
-       last_key = key,
        key = strtok(NULL, kPathSeparator)) {
-    // Special case root node.
-    if (key == path_copy.get() && strlen(key) != 0) {
-      *node = root_;
-      continue;
-    }
+    last_key = key;
+    parent = cur;
+    cur = cJSON_GetObjectItemCaseSensitive(parent, key);
 
-    // Node is from last run. If it was nullptr, then the path
     // does not exist.
-    if (!node) {
-      if (!create_parent_path) {
-        // Unless the parent path is being created, bail
-        // as all other iterations are just nullptr.
-        break;
-      }
-
+    if (create_path && !cur) {
       // If node is null, just start creating the parents.
-      *parent = cJSON_AddObjectToObject(*parent, last_key);
-    } else {
-      *parent = *node;
-      *node = cJSON_GetObjectItemCaseSensitive(*parent, key);
+      cur = cJSON_AddObjectToObject(parent, key);
     }
+  }
+
+  *parent_out = parent;
+  *node_out = cur;
+  if (last_key_out) {
+    *last_key_out.value() = last_key;
   }
 }
 
@@ -80,12 +76,8 @@ void FirebaseDatabase::OnWsFrame(WebsocketFrame frame) {
       break;
 
     case WebsocketOpcode::kText: {
-                                   /*
-      cJSON *json = cJSON_Parse(frame.data().data());
-      // TODO(awong): Delete the json obj?
-      OnUpdate(json);
-      // This should be json?
-      // */
+      unique_cJSON_ptr json(cJSON_Parse(frame.data().data()));
+      OnCommand(json.get());
       break;
     }
 
@@ -115,9 +107,9 @@ void FirebaseDatabase::OnCommand(cJSON* command) {
     //   c = connection oriented command like server information or
     //       redirect info.
     //   d = data commands such as publishing new database entries.
-    if (strcmp(type->valuestring, "c") != 0) {
+    if (strcmp(type->valuestring, "c") == 0) {
       OnConnectionCommand(data);
-    } else if (strcmp(type->valuestring, "d") != 0) {
+    } else if (strcmp(type->valuestring, "d") == 0) {
       OnDataCommand(data);
     }
   }
@@ -133,9 +125,9 @@ void FirebaseDatabase::OnConnectionCommand(cJSON* command) {
   //   r - redirect.
   if (cJSON_IsString(type) && cJSON_IsString(host) && host->valuestring != nullptr) {
     real_host_ = host->valuestring;
-    if (strcmp(type->valuestring, "h") != 0) {
+    if (strcmp(type->valuestring, "h") == 0) {
       // TODO(ajwong): Print other data? maybe?
-    } else if (strcmp(type->valuestring, "r") != 0) {
+    } else if (strcmp(type->valuestring, "r") == 0) {
       // TODO(awong): Reconnect.
     }
   }
@@ -148,7 +140,7 @@ void FirebaseDatabase::OnDataCommand(cJSON* command) {
   cJSON* path = cJSON_GetObjectItemCaseSensitive(body, "p");
 //  cJSON* hash = cJSON_GetObjectItemCaseSensitive(body, "h");
 
-  if (cJSON_IsNumber(request_id) &&
+  if ((!request_id || cJSON_IsNumber(request_id)) &&
       cJSON_IsString(action) && action->valuestring != nullptr &&
       cJSON_IsObject(body)) {
     // TODO(awong): Match the request_id? Do we even care to track?
@@ -157,9 +149,9 @@ void FirebaseDatabase::OnDataCommand(cJSON* command) {
     //   d - a JSON tree is being replaced.
     //   m - a JSON tree should be merged. [ TODO(awong): what does this mean? Don't delete? ]
     unique_cJSON_ptr new_data(cJSON_DetachItemFromObjectCaseSensitive(body, "d"));
-    if (strcmp(action->valuestring, "d") != 0) {
+    if (strcmp(action->valuestring, "d") == 0) {
       ReplacePath(path->valuestring, std::move(new_data));
-    } if (strcmp(action->valuestring, "m") != 0) {
+    } if (strcmp(action->valuestring, "m") == 0) {
       MergePath(path->valuestring, std::move(new_data));
     }
   }
@@ -168,34 +160,16 @@ void FirebaseDatabase::OnDataCommand(cJSON* command) {
 void FirebaseDatabase::ReplacePath(const char* path, unique_cJSON_ptr new_data) {
   cJSON* parent;
   cJSON* node;
-  GetPath(path, &parent, &node, true);
-  if (!cJSON_IsObject(parent)) {
-    // TODO(awong): Log warning.
-    return;
-  }
-  if (node) {
-    cJSON_ReplaceItemViaPointer(parent, node, new_data.release());
-  } else {
-    // TODO(awong): Uh oh. need a key.
-    cJSON_AddItemToObject(parent, "key", new_data.release());
-  }
+  std::string key;
+  GetPath(path, &parent, &node, true, &key);
+  cJSON_ReplaceItemInObjectCaseSensitive(parent, key.c_str(),  new_data.release());
 }
 
 void FirebaseDatabase::MergePath(const char* path, unique_cJSON_ptr new_data) {
   cJSON* parent;
   cJSON* node;
   GetPath(path, &parent, &node, true);
-  if (!cJSON_IsObject(parent)) {
-    // TODO(awong): Log warning.
-    return;
-  }
-
-  if (!node) {
-    // TODO(awong): Uh oh. Also need key.
-    cJSON_AddItemToObject(parent, "key", new_data.release());
-    return;
-  }
-  // TODO(awong): Walk the 2 trees and merge. *sigh*
+  cJSONUtils_MergePatchCaseSensitive(node, new_data.get());
 }
 
 }  // namespace esp_cxx

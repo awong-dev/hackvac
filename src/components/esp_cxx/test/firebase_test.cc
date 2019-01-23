@@ -1,66 +1,79 @@
-#include "esp_cxx/task.h"
-#include "esp_cxx/httpd/http_server.h"
-#include "mongoose.h"
-#include "cJSON.h"
-
-#include <iostream>
+#include "esp_cxx/firebase/firebase_database.h"
+#include "esp_cxx/httpd/event_manager.h"
 
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 
-class FirebaseDatabase {
- public:
-  FirebaseDatabase() {
+namespace {
+const std::string_view kOverwriteResponse = R"(
+{ "t":"d",
+  "d":{
+    "b":{
+      "p":"test",
+      "d":{
+        "int":314159,
+        "string":"hi",
+        "isTrue":true,
+        "array": [ 1, "two", 3 ],
+        "obj": { "a": 1 }
+      }
+    },
+  "a":"d"
   }
+})";
 
-  void Connect() {
-  }
+}  // namespace
 
- private:
+namespace esp_cxx {
+class Firebase : public ::testing::Test {
+ protected:
+  EventManager event_manager_;
+  FirebaseDatabase database_{"fake.host", "a_database", "/listen/path", &event_manager_};
 };
 
-class FirebaseDatabaseCommand {
- public:
-  explicit FirebaseDatabaseCommand(cJSON* raw_json) : raw_json_(raw_json) {
-  }
-  bool IsRedirect() {
-    cJSON* type = cJSON_GetObjectItemCaseSensitive(raw_json_, "t");
-    if (!cJSON_IsString(type) || strcmp(type->valuestring, "c") != 0) {
-      // TODO(awong): Actually assert.
-      std::cout << "boo";
-      return false;
-    }
-    cJSON* data = cJSON_GetObjectItemCaseSensitive(raw_json_, "d");
-    cJSON* data_type = cJSON_GetObjectItemCaseSensitive(data, "t");
-    if (!cJSON_IsString(data_type) || strcmp(data_type->valuestring, "r") != 0) {
-      std::cout << "not stru";
-      return false;
-    }
-    return true;
-  }
- private:
-  cJSON* raw_json_;
-};
+TEST_F(Firebase, Get) {
+  EXPECT_TRUE(database_.Get(""));
+  EXPECT_TRUE(database_.Get("/"));
+  cJSON* root = database_.Get("/");
+  EXPECT_TRUE(cJSON_IsObject(root));
+  EXPECT_EQ(0, cJSON_GetArraySize(root));
+}
 
-TEST(Firebase, Connect) {
-  std::string_view response = R"({"t":"c","d":{"t":"r","d":"s-usc1c-nss-226.firebaseio.com"}})";
+TEST_F(Firebase, PathUpdate) {
+  // Create dummy data.
+  WebsocketFrame frame(kOverwriteResponse, WebsocketOpcode::kText);
+  database_.OnWsFrame(frame);
+  ASSERT_TRUE(database_.Get("/test")) << "Path root should exist";
+
+  // Check an int value.
+  cJSON* item = database_.Get("/test/int");
+  ASSERT_TRUE(cJSON_IsNumber(item));
+  EXPECT_EQ(314159, item->valueint);
+
+  // Check an string value.
+  item = database_.Get("/test/string");
+  ASSERT_TRUE(cJSON_IsString(item));
+  EXPECT_STREQ("hi", item->valuestring);
+
+  // Check an bool value.
+  item = database_.Get("/test/isTrue");
+  ASSERT_TRUE(cJSON_IsBool(item));
+  EXPECT_TRUE(cJSON_IsTrue(item));
+
+  // Check an array value.
+  item = database_.Get("/test/array");
+  ASSERT_TRUE(cJSON_IsArray(item));
+  EXPECT_EQ(3, cJSON_GetArraySize(item));
+
+  // Check a nested field.
+  item = database_.Get("/test/obj");
+  ASSERT_TRUE(cJSON_IsObject(item));
+
+//  std::string_view response = R"({"t":"c","d":{"t":"r","d":"s-usc1c-nss-226.firebaseio.com"}})";
 //  std::string_view response = R"({"t":"c","d":{"t":"h","d":{"ts":1547021870522,"v":"5","h":"s-usc1c-nss-226.firebaseio.com","s":"cQBtTldc3zfMgsY2t3UL2BYJRkpGaeMw"}}})";
-  cJSON *json = cJSON_Parse(response.data());
-  std::cout << cJSON_Print(json);
-  FirebaseDatabaseCommand command(json);
-  EXPECT_TRUE(command.IsRedirect());
+//  std::cout << cJSON_Print(database_.Get("/"));
+//  FirebaseDatabaseCommand command(json);
+//  EXPECT_TRUE(command.IsRedirect());
 }
 
-/*
-void OnFrame(esp_cxx::WebsocketFrame frame) {
-  std::cerr << frame.data();
-}
-
-TEST(Firebase, Connect) {
-  esp_cxx::WebsocketChannel channel(
-      "socket", 
-      "wss://test-ns.firebaseio.com/.ws?v=5&ls=test");
-  channel.Start(&OnFrame);
-  for (;;) sleep(10);
-}
-*/
+}  // namespace esp_cxx

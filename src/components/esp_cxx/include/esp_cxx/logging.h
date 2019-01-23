@@ -15,10 +15,10 @@ constexpr char kEspCxxTag[] = "espcxx";
 #include <cstdint>
 #include <time.h>
 
-#define ESP_LOGD(tag, fmt, args...) fprintf(stderr, "D: %s: " fmt, tag, ##args)
-#define ESP_LOGI(tag, fmt, args...) fprintf(stderr, "I: %s: " fmt, tag, ##args)
-#define ESP_LOGW(tag, fmt, args...) fprintf(stderr, "W: %s: " fmt, tag, ##args)
-#define ESP_LOGE(tag, fmt, args...) fprintf(stderr, "E: %s: " fmt, tag, ##args)
+#define ESP_LOGD(tag, fmt, args...) fprintf(stderr, "%s:%d D: %s: " fmt, __FILE__, __LINE__, tag, ##args)
+#define ESP_LOGI(tag, fmt, args...) fprintf(stderr, "%s:%d I: %s: " fmt, __FILE__, __LINE__, tag, ##args)
+#define ESP_LOGW(tag, fmt, args...) fprintf(stderr, "%s:%d W: %s: " fmt, __FILE__, __LINE__, tag, ##args)
+#define ESP_LOGE(tag, fmt, args...) fprintf(stderr, "%s:%d E: %s: " fmt, __FILE__, __LINE__, tag, ##args)
 #define ESP_LOG_BUFFER_HEX_LEVEL(tag, bytes, size, level)
 
 typedef enum {

@@ -25,15 +25,23 @@ enum class WebsocketOpcode : uint8_t {
 
 class WebsocketFrame {
  public:
-  explicit WebsocketFrame(websocket_message* raw_frame)
-    : raw_frame_(raw_frame) {
+  explicit WebsocketFrame(websocket_message* frame)
+    : WebsocketFrame(
+        {reinterpret_cast<char*>(frame->data), frame->size},
+        static_cast<WebsocketOpcode>(frame->flags & 0xf)) {
   }
 
-  WebsocketOpcode opcode() const { return static_cast<WebsocketOpcode>(raw_frame_->flags & 0xf); }
-  std::string_view data() const { return {reinterpret_cast<char*>(raw_frame_->data), raw_frame_->size}; }
+  WebsocketFrame(std::string_view data, WebsocketOpcode opcode)
+    : data_(data),
+      opcode_(opcode) {
+  }
+
+  std::string_view data() const { return data_; }
+  WebsocketOpcode opcode() const { return opcode_; }
 
  private:
-  websocket_message* raw_frame_;
+  std::string_view data_;
+  WebsocketOpcode opcode_;
 };
 
 class WebsocketSender {

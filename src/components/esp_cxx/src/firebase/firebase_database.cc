@@ -65,7 +65,7 @@ void FirebaseDatabase::GetPath(const std::string& path, cJSON** parent_out, cJSO
 
   *parent_out = parent;
   *node_out = cur;
-  if (last_key_out) {
+  if (last_key_out && last_key) {
     *last_key_out.value() = last_key;
   }
 }
@@ -162,7 +162,12 @@ void FirebaseDatabase::ReplacePath(const char* path, unique_cJSON_ptr new_data) 
   cJSON* node;
   std::string key;
   GetPath(path, &parent, &node, true, &key);
-  cJSON_ReplaceItemInObjectCaseSensitive(parent, key.c_str(),  new_data.release());
+  if (parent) {
+    cJSON_ReplaceItemInObjectCaseSensitive(parent, key.c_str(),  new_data.release());
+  } else {
+    root_ = std::move(new_data);
+    // TODO(awong): Fix cJSON To correct item->string which isn't erased here after detach.
+  }
 }
 
 void FirebaseDatabase::MergePath(const char* path, unique_cJSON_ptr new_data) {

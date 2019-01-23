@@ -29,6 +29,8 @@ class FirebaseDatabase {
 
  private:
   FRIEND_TEST(Firebase, PathUpdate);
+  FRIEND_TEST(Firebase, MergeUpdate);
+  FRIEND_TEST(Firebase, OverwriteUpdate);
 
   void GetPath(const std::string& path, cJSON** parent, cJSON** node,
                bool create_parent_path = false,

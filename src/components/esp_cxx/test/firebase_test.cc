@@ -5,17 +5,58 @@
 #include "gmock/gmock.h"
 
 namespace {
+const std::string_view kFullUpdateResponse = R"(
+{ "t":"d",
+  "d":{
+    "b":{
+      "p":"test",
+      "d":{
+        "num":314159,
+        "string":"hi",
+        "isTrue":true,
+        "array": [ 1, "two", 3 ],
+        "obj": { "a": 1 }
+      }
+    },
+  "a":"d"
+  }
+})";
+
+const std::string_view kMergeResponse = R"(
+{ "t":"d",
+  "d":{
+    "b":{
+      "p":"test",
+      "d":{
+        "num": 10,
+        "array": null,
+        "obj": { "a": null }
+      }
+    },
+  "a":"m"
+  }
+})";
+
 const std::string_view kOverwriteResponse = R"(
 { "t":"d",
   "d":{
     "b":{
       "p":"test",
       "d":{
-        "int":314159,
-        "string":"hi",
-        "isTrue":true,
-        "array": [ 1, "two", 3 ],
-        "obj": { "a": 1 }
+        "num": 3
+      }
+    },
+  "a":"d"
+  }
+})";
+
+const std::string_view kOverwriteRootResponse = R"(
+{ "t":"d",
+  "d":{
+    "b":{
+      "p":"",
+      "d":{
+        "moo": "cow"
       }
     },
   "a":"d"
@@ -41,14 +82,14 @@ TEST_F(Firebase, Get) {
 
 TEST_F(Firebase, PathUpdate) {
   // Create dummy data.
-  WebsocketFrame frame(kOverwriteResponse, WebsocketOpcode::kText);
-  database_.OnWsFrame(frame);
+  database_.OnWsFrame(WebsocketFrame(kFullUpdateResponse, WebsocketOpcode::kText));
   ASSERT_TRUE(database_.Get("/test")) << "Path root should exist";
 
-  // Check an int value.
-  cJSON* item = database_.Get("/test/int");
+  // Check an num value.
+  cJSON* item = database_.Get("/test/num");
   ASSERT_TRUE(cJSON_IsNumber(item));
   EXPECT_EQ(314159, item->valueint);
+  EXPECT_FLOAT_EQ(314159, item->valuedouble);
 
   // Check an string value.
   item = database_.Get("/test/string");
@@ -68,12 +109,58 @@ TEST_F(Firebase, PathUpdate) {
   // Check a nested field.
   item = database_.Get("/test/obj");
   ASSERT_TRUE(cJSON_IsObject(item));
+  EXPECT_EQ(1, cJSON_GetArraySize(item));
+}
 
-//  std::string_view response = R"({"t":"c","d":{"t":"r","d":"s-usc1c-nss-226.firebaseio.com"}})";
-//  std::string_view response = R"({"t":"c","d":{"t":"h","d":{"ts":1547021870522,"v":"5","h":"s-usc1c-nss-226.firebaseio.com","s":"cQBtTldc3zfMgsY2t3UL2BYJRkpGaeMw"}}})";
-//  std::cout << cJSON_Print(database_.Get("/"));
-//  FirebaseDatabaseCommand command(json);
-//  EXPECT_TRUE(command.IsRedirect());
+TEST_F(Firebase, MergeUpdate) {
+  // Create dummy data.
+  database_.OnWsFrame(WebsocketFrame(kFullUpdateResponse, WebsocketOpcode::kText));
+  ASSERT_EQ(5, cJSON_GetArraySize(database_.Get("/test")));
+  ASSERT_EQ(1, cJSON_GetArraySize(database_.Get("/test/obj")));
+
+  // Do a merge update.
+  database_.OnWsFrame(WebsocketFrame(kMergeResponse, WebsocketOpcode::kText));
+  cJSON* item = database_.Get("/test");
+  ASSERT_TRUE(cJSON_IsObject(item));
+
+  // This merge erases one top level field.
+  EXPECT_EQ(4, cJSON_GetArraySize(item));
+  EXPECT_FALSE(database_.Get("/test/array"));
+
+  // Check the new value actaully propagated.
+  item = database_.Get("/test/num");
+  ASSERT_TRUE(cJSON_IsNumber(item));
+  EXPECT_FLOAT_EQ(10, item->valuedouble);
+
+  // Check the nested object also got updated.
+  EXPECT_EQ(0, cJSON_GetArraySize(database_.Get("/test/obj")));
+}
+
+TEST_F(Firebase, OverwriteUpdate) {
+  // Create dummy data.
+  database_.OnWsFrame(WebsocketFrame(kFullUpdateResponse, WebsocketOpcode::kText));
+  ASSERT_EQ(5, cJSON_GetArraySize(database_.Get("/test")));
+
+  // Do an overwrite update.
+  database_.OnWsFrame(WebsocketFrame(kOverwriteResponse, WebsocketOpcode::kText));
+  cJSON* item = database_.Get("/test");
+  ASSERT_TRUE(cJSON_IsObject(item));
+  EXPECT_EQ(1, cJSON_GetArraySize(item));
+
+  item = database_.Get("/test/num");
+  ASSERT_TRUE(item);
+  EXPECT_EQ(3, item->valueint);
+  EXPECT_FLOAT_EQ(3, item->valuedouble);
+
+  // Now overwrite root.
+  database_.OnWsFrame(WebsocketFrame(kOverwriteRootResponse, WebsocketOpcode::kText));
+  item = database_.Get("/");
+  ASSERT_TRUE(cJSON_IsObject(item));
+  EXPECT_EQ(1, cJSON_GetArraySize(item));
+  item = database_.Get("/moo");
+
+  ASSERT_TRUE(cJSON_IsString(item));
+  EXPECT_STREQ("cow", item->valuestring);
 }
 
 }  // namespace esp_cxx

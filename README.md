@@ -1,5 +1,6 @@
 HackVac
 =======
+[![Build Status](https://travis-ci.org/awong-dev/hackvac.svg?branch=master)](https://travis-ci.org/awong-dev/hackvac)
 
 Hacking my heatpump for fun and...likely cold and ruins... (actually probably not cause this is going to be done super carefully but it's a fun image).
 
@@ -29,3 +30,8 @@ make monitor
 
 The initial configuration will have the esp32 create a config wifi network
 called `hackvac_setup` with setup `cn105rulez`.
+
+Unittests
+```
+TEST_COMPONENTS=esp_cxx make -f Makefile.host V=1 host_build/hackvac_host 
+```

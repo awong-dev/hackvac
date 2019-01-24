@@ -1,4 +1,5 @@
 #include "esp_cxx/firebase/firebase_database.h"
+#include "esp_cxx/httpd/event_manager.h"
 
 #include <array>
 
@@ -29,7 +30,8 @@ FirebaseDatabase::FirebaseDatabase(
   : host_(host),
     database_(database),
     listen_path_(listen_path),
-    websocket_(event_manager,
+    event_manager_(event_manager),
+    websocket_(event_manager_,
                "wss://" + host_ + "/.ws?v=5&ns=" + database_),
     root_(cJSON_CreateObject()),
     update_template_(cJSON_CreateObject()) {
@@ -40,7 +42,7 @@ FirebaseDatabase::~FirebaseDatabase() {
 
 void FirebaseDatabase::Connect() {
   websocket_.Connect<FirebaseDatabase, &FirebaseDatabase::OnWsFrame>(this);
-  // TODO(awong): Schedule periodic keepalive ping.
+  SendKeepalive();
 }
 
 void FirebaseDatabase::Publish(const std::string& path,
@@ -257,6 +259,12 @@ void FirebaseDatabase::MergePath(const char* path, unique_cJSON_ptr new_data) {
     ReplacePath(update_path.c_str(), std::move(update_node));
     update = next;
   }
+}
+
+void FirebaseDatabase::SendKeepalive() {
+  static constexpr int kKeepAliveMs = 45000;
+  websocket_.SendText("0");
+  event_manager_->AddDelayed([&] {SendKeepalive();}, kKeepAliveMs);
 }
 
 }  // namespace esp_cxx

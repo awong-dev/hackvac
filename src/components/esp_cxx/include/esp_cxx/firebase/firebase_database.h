@@ -57,9 +57,13 @@ class FirebaseDatabase {
   // Remove all null elements and objects with no entries.
   bool RemoveEmptyNodes(cJSON* node);
 
+  // Send Keepalive if connected.
+  void SendKeepalive();
+
   std::string host_;
   std::string database_;
   std::string listen_path_;
+  EventManager* event_manager_;
 
   std::string real_host_;
   std::string session_id_;

@@ -14,8 +14,8 @@ const std::string_view kFullUpdateResponse = R"(
         "num":314159,
         "string":"hi",
         "isTrue":true,
-        "array": [ 1, "two", 3 ],
-        "obj": { "a": 1 }
+        "array": { "0": 1, "1": "two", "3": 3 },
+        "obj": { "a": 1, "b": 2 }
       }
     },
   "a":"d"
@@ -101,22 +101,23 @@ TEST_F(Firebase, PathUpdate) {
   ASSERT_TRUE(cJSON_IsBool(item));
   EXPECT_TRUE(cJSON_IsTrue(item));
 
-  // Check an array value.
+  // Check an array value. Firebase represents these as
+  // objects indexed by their number.
   item = database_.Get("/test/array");
-  ASSERT_TRUE(cJSON_IsArray(item));
+  ASSERT_TRUE(cJSON_IsObject(item));
   EXPECT_EQ(3, cJSON_GetArraySize(item));
 
   // Check a nested field.
   item = database_.Get("/test/obj");
   ASSERT_TRUE(cJSON_IsObject(item));
-  EXPECT_EQ(1, cJSON_GetArraySize(item));
+  EXPECT_EQ(2, cJSON_GetArraySize(item));
 }
 
 TEST_F(Firebase, MergeUpdate) {
   // Create dummy data.
   database_.OnWsFrame(WebsocketFrame(kFullUpdateResponse, WebsocketOpcode::kText));
   ASSERT_EQ(5, cJSON_GetArraySize(database_.Get("/test")));
-  ASSERT_EQ(1, cJSON_GetArraySize(database_.Get("/test/obj")));
+  ASSERT_EQ(2, cJSON_GetArraySize(database_.Get("/test/obj")));
 
   // Do a merge update.
   database_.OnWsFrame(WebsocketFrame(kMergeResponse, WebsocketOpcode::kText));
@@ -124,7 +125,7 @@ TEST_F(Firebase, MergeUpdate) {
   ASSERT_TRUE(cJSON_IsObject(item));
 
   // This merge erases one top level field.
-  EXPECT_EQ(4, cJSON_GetArraySize(item));
+  EXPECT_EQ(4, cJSON_GetArraySize(item)) << cJSON_Print(item);
   EXPECT_FALSE(database_.Get("/test/array"));
 
   // Check the new value actaully propagated.
@@ -132,7 +133,8 @@ TEST_F(Firebase, MergeUpdate) {
   ASSERT_TRUE(cJSON_IsNumber(item));
   EXPECT_FLOAT_EQ(10, item->valuedouble);
 
-  // Check the nested object also got updated.
+  // Oddly on a nested object, it overwrites the whole thing
+  // rather than just the changed fields.
   EXPECT_EQ(0, cJSON_GetArraySize(database_.Get("/test/obj")));
 }
 

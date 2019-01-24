@@ -4,7 +4,6 @@
 #include "esp_cxx/cpointer.h"
 
 #include "gtest/gtest_prod.h"
-#include "esp_cxx/cxx17hack.h"
 
 struct cJSON;
 
@@ -34,7 +33,7 @@ class FirebaseDatabase {
 
   void GetPath(const std::string& path, cJSON** parent, cJSON** node,
                bool create_parent_path = false,
-               std::optional<std::string*> last_key = {});
+               std::string* last_key = nullptr);
 
   // Handle incoming websocket frames and errors.
   void OnWsFrame(WebsocketFrame frame);
@@ -54,6 +53,9 @@ class FirebaseDatabase {
 
   // Merges |new_data| into the existing tree at |path| in the stored json tree.
   void MergePath(const char* path, unique_cJSON_ptr new_data);
+
+  // Remove all null elements and objects with no entries.
+  bool RemoveEmptyNodes(cJSON* update_node);
 
   std::string host_;
   std::string database_;

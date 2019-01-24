@@ -1,10 +1,23 @@
 #include "esp_cxx/firebase/firebase_database.h"
+
+#include <array>
+
 #include "esp_cxx/logging.h"
 
 #include "cJSON.h"
 extern "C" {
 #include "cJSON_Utils.h"
 }
+
+namespace {
+
+struct RemoveEmptyState {
+  cJSON* parent;
+  cJSON* cur;
+  cJSON* entry;
+};
+
+}  // namespace
 
 namespace esp_cxx {
 
@@ -41,7 +54,7 @@ cJSON* FirebaseDatabase::Get(const std::string& path) {
 }
 
 void FirebaseDatabase::GetPath(const std::string& path, cJSON** parent_out, cJSON** node_out,
-                               bool create_path, std::optional<std::string*> last_key_out) {
+                               bool create_path, std::string* last_key_out) {
   static constexpr char kPathSeparator[] = "/";
 
   cJSON* parent = nullptr;
@@ -66,8 +79,44 @@ void FirebaseDatabase::GetPath(const std::string& path, cJSON** parent_out, cJSO
   *parent_out = parent;
   *node_out = cur;
   if (last_key_out && last_key) {
-    *last_key_out.value() = last_key;
+    *last_key_out = last_key;
   }
+}
+
+bool FirebaseDatabase::RemoveEmptyNodes(cJSON* node) {
+  if (!cJSON_IsObject(node))
+    return true;
+
+  std::array<RemoveEmptyState, 10> stack; // No more than 10 deep please.
+  int stack_level = 0;
+  stack.at(stack_level++) = {nullptr, node, node->child};
+
+  while (stack_level > 0) {
+    RemoveEmptyState state = stack.at(--stack_level);
+    cJSON* entry = state.entry;
+    while (entry) {
+      if (cJSON_IsNull(entry)) {
+        cJSON_Delete(cJSON_DetachItemViaPointer(state.cur, entry));
+      } else if (cJSON_IsObject(entry)) {
+        if (cJSON_GetArraySize(state.cur) == 0) {
+          cJSON_Delete(cJSON_DetachItemViaPointer(state.parent, state.cur));
+        } else {
+          if (stack_level + 2 >= stack.size()) {
+            return false;
+          }
+          stack.at(stack_level++) = {state.parent, state.cur, entry->next};
+          stack.at(stack_level++) = {state.cur, entry, entry->child};
+          goto recur;
+        }
+      }
+      entry = entry->next;
+    }
+
+recur:
+    ;
+  }
+
+  return true;
 }
 
 void FirebaseDatabase::OnWsFrame(WebsocketFrame frame) {
@@ -162,19 +211,44 @@ void FirebaseDatabase::ReplacePath(const char* path, unique_cJSON_ptr new_data) 
   cJSON* node;
   std::string key;
   GetPath(path, &parent, &node, true, &key);
-  if (parent) {
+  if (cJSON_IsNull(new_data.get())) {
+    // Firebase doesn't support nulls as values of objects meaning nulls
+    // are effectively deletes.
+    cJSON_Delete(cJSON_DetachItemViaPointer(parent, node));
+  } else if (parent) {
     cJSON_ReplaceItemInObjectCaseSensitive(parent, key.c_str(),  new_data.release());
   } else {
     root_ = std::move(new_data);
     // TODO(awong): Fix cJSON To correct item->string which isn't erased here after detach.
   }
+
+  // TODO(awong): This covers more than strictly necessary, but it's easy to understand.
+  RemoveEmptyNodes(root_.get());
 }
 
 void FirebaseDatabase::MergePath(const char* path, unique_cJSON_ptr new_data) {
+  // new_data is actually a key/value pair of relative _paths_ from the root.
+  // Each path is considered an overwrite operation.
+  cJSON* update = new_data->child;
+  while (update) {
+    // Cache next pointer as item will be detached in loop.
+    cJSON* next = update->next;
+    std::string update_path = path;
+    update_path += "/";
+    update_path += update->string;
+    unique_cJSON_ptr update_node(cJSON_DetachItemViaPointer(new_data.get(), update));
+    ReplacePath(update_path.c_str(), std::move(update_node));
+    update = next;
+  }
+
+
+  /*
+  // TODO(awong): This is incorrect
   cJSON* parent;
   cJSON* node;
   GetPath(path, &parent, &node, true);
   cJSONUtils_MergePatchCaseSensitive(node, new_data.get());
+  */
 }
 
 }  // namespace esp_cxx

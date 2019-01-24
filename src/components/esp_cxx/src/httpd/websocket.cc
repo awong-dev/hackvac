@@ -24,6 +24,10 @@ bool WebsocketChannel::Connect(OnFrameCb on_frame_cb) {
   return !!connection_;
 }
 
+void WebsocketChannel::SendText(std::string_view text) {
+  mg_send_websocket_frame(connection_, WEBSOCKET_OP_TEXT, text.data(), text.size());
+}
+
 void WebsocketChannel::OnWsEvent(mg_connection *new_connection, int event, websocket_message *ev_data) {
   switch (event) {
     case MG_EV_CONNECT: {

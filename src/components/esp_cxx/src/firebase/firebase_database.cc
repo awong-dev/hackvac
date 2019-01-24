@@ -31,7 +31,8 @@ FirebaseDatabase::FirebaseDatabase(
     listen_path_(listen_path),
     websocket_(event_manager,
                "wss://" + host_ + "/.ws?v=5&ns=" + database_),
-    root_(cJSON_CreateObject()) {
+    root_(cJSON_CreateObject()),
+    update_template_(cJSON_CreateObject()) {
 }
 
 FirebaseDatabase::~FirebaseDatabase() {
@@ -43,7 +44,27 @@ void FirebaseDatabase::Connect() {
 }
 
 void FirebaseDatabase::Publish(const std::string& path,
-                               cJSON* new_value) {
+                               unique_cJSON_ptr new_value) {
+  // Example packet:
+  //  {"t":"d","d":{"r":4,"a":"p","b":{"p":"/test","d":{"hi":"mom","num":1547104593160},"h":""}}}
+
+  // Create data envlope.
+  unique_cJSON_ptr publish(cJSON_CreateObject());
+  cJSON_AddStringToObject(publish.get(), "t", "d");
+  cJSON* data = cJSON_AddObjectToObject(publish.get(), "d");
+
+  // Create publish request
+  cJSON_AddNumberToObject(data, "r", ++request_num_);
+  cJSON_AddStringToObject(data, "a", "p");
+  cJSON* body = cJSON_AddObjectToObject(data, "b");
+
+  // Insert data.
+  cJSON_AddStringToObject(body, "p", path.c_str());
+  cJSON_AddItemToObject(body, "p", cJSON_Duplicate(new_value.get(), true));
+
+  ReplacePath(path.c_str(), std::move(new_value));
+
+  websocket_.SendText(cJSON_PrintUnformatted(publish.get()));
 }
 
 cJSON* FirebaseDatabase::Get(const std::string& path) {
@@ -211,18 +232,14 @@ void FirebaseDatabase::ReplacePath(const char* path, unique_cJSON_ptr new_data) 
   cJSON* node;
   std::string key;
   GetPath(path, &parent, &node, true, &key);
-  if (cJSON_IsNull(new_data.get())) {
-    // Firebase doesn't support nulls as values of objects meaning nulls
-    // are effectively deletes.
-    cJSON_Delete(cJSON_DetachItemViaPointer(parent, node));
-  } else if (parent) {
+  if (parent) {
     cJSON_ReplaceItemInObjectCaseSensitive(parent, key.c_str(),  new_data.release());
   } else {
     root_ = std::move(new_data);
     // TODO(awong): Fix cJSON To correct item->string which isn't erased here after detach.
   }
 
-  // TODO(awong): This covers more than strictly necessary, but it's easy to understand.
+  // Firebase doesn't support nulls. This garbage collection step keeps us consistent.
   RemoveEmptyNodes(root_.get());
 }
 
@@ -240,15 +257,6 @@ void FirebaseDatabase::MergePath(const char* path, unique_cJSON_ptr new_data) {
     ReplacePath(update_path.c_str(), std::move(update_node));
     update = next;
   }
-
-
-  /*
-  // TODO(awong): This is incorrect
-  cJSON* parent;
-  cJSON* node;
-  GetPath(path, &parent, &node, true);
-  cJSONUtils_MergePatchCaseSensitive(node, new_data.get());
-  */
 }
 
 }  // namespace esp_cxx

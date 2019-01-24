@@ -75,6 +75,8 @@ class WebsocketChannel {
     //
   }
 
+  void SendText(std::string_view text);
+
  private:
   void OnWsEvent(mg_connection *new_connection, int event, websocket_message *ev_data);
   static void OnWsEventThunk(mg_connection *new_connection, int event,

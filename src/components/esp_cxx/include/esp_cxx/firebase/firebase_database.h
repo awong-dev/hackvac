@@ -23,7 +23,7 @@ class FirebaseDatabase {
   // Connects 
   void Connect();
 
-  void Publish(const std::string& path, cJSON* new_value);
+  void Publish(const std::string& path, unique_cJSON_ptr new_value);
   cJSON* Get(const std::string& path);
 
  private:
@@ -55,7 +55,7 @@ class FirebaseDatabase {
   void MergePath(const char* path, unique_cJSON_ptr new_data);
 
   // Remove all null elements and objects with no entries.
-  bool RemoveEmptyNodes(cJSON* update_node);
+  bool RemoveEmptyNodes(cJSON* node);
 
   std::string host_;
   std::string database_;
@@ -64,9 +64,11 @@ class FirebaseDatabase {
   std::string real_host_;
   std::string session_id_;
 //  int sever_timestamp_;
+  size_t request_num_ = 0;
 
   WebsocketChannel websocket_;
   unique_cJSON_ptr root_;
+  unique_cJSON_ptr update_template_;
 };
 
 }  // namespace esp_cxx

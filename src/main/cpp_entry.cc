@@ -11,6 +11,7 @@
 #endif
 
 #include "esp_cxx/gpio.h"
+#include "esp_cxx/httpd/event_manager.h"
 #include "esp_cxx/httpd/http_server.h"
 #include "esp_cxx/httpd/standard_endpoints.h"
 #include "esp_cxx/logging.h"
@@ -27,7 +28,9 @@
 HTML_DECL(resp404_html);
 HTML_DECL(index_html);
 
-constexpr esp_cxx::Gpio kBlinkGpio = esp_cxx::Gpio::Pin<2>();
+using namespace esp_cxx;
+
+constexpr Gpio kBlinkGpio = Gpio::Pin<2>();
 
 static const char *kTag = "hackvac";
 
@@ -39,10 +42,10 @@ void blink_task_func(void* parameters) {
   for (;;) {
       /* Blink off (output low) */
       kBlinkGpio.Set(false);
-      esp_cxx::Task::Delay(BLINK_DELAY_MS);
+      Task::Delay(BLINK_DELAY_MS);
       /* Blink on (output high) */
       kBlinkGpio.Set(true);
-      esp_cxx::Task::Delay(BLINK_DELAY_MS);
+      Task::Delay(BLINK_DELAY_MS);
   }
 }
 
@@ -51,7 +54,7 @@ void uptime_task_func(void* parameters) {
   int counter = 0;
   for (;;) {
     ESP_LOGI(kTag, "uptime: %ds\n", (counter++) * kUpdatePublishSec);
-    esp_cxx::Task::Delay(kUpdatePublishSec * 1000);
+    Task::Delay(kUpdatePublishSec * 1000);
   }
 }
 
@@ -107,15 +110,15 @@ void cpp_entry() {
 #endif
 
   // Silly debug tasks.
-  esp_cxx::Task blink_task(&blink_task_func, nullptr, "blink_task");
-  esp_cxx::Task uptime_task(&uptime_task_func, nullptr, "uptime_task");
-  esp_cxx::RunOtaWatchdog();
+  Task blink_task(&blink_task_func, nullptr, "blink_task");
+  Task uptime_task(&uptime_task_func, nullptr, "uptime_task");
+  RunOtaWatchdog();
 
   // Setup Wifi access.
   // TODO(awong): move all this into a wifi object.
   static constexpr char kFallbackSsid[] = "hackvac_setup";
   static constexpr char kFallbackPassword[] = "cn105rulez";
-  esp_cxx::Wifi wifi;
+  Wifi wifi;
   if (!wifi.ConnectToAP() && !wifi.CreateSetupNetwork(kFallbackSsid, kFallbackPassword)) {
     ESP_LOGE(kTag, "Failed to connect to AP OR create a Setup Network.");
   }
@@ -131,10 +134,11 @@ void cpp_entry() {
   std::string_view resp404_html(
       reinterpret_cast<const char*>(HTML_CONTENTS(resp404_html)),
       HTML_LEN(resp404_html));
-  esp_cxx::HttpServer http_server("httpd", ":8080", resp404_html);
-  esp_cxx::StandardEndpoints standard_endpoints(index_html);
+  EventManager event_manager;
+  HttpServer http_server(&event_manager, ":8080", resp404_html);
+  StandardEndpoints standard_endpoints(index_html);
   standard_endpoints.RegisterEndpoints(&http_server);
-  http_server.Start();
+  Task network_task = Task::Create<EventManager, &EventManager::Run>(&event_manager, "net");
 
   // TODO(awong): Add idle task hook ot sleep. Use hte ESP32-IDF hooks and don't create a task directly.
   for (;;) {

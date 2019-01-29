@@ -13,7 +13,7 @@ namespace esp_cxx {
 
 class HttpServer {
  public:
-  HttpServer(const char* name, const char* port,
+  HttpServer(EventManager* event_manager, const char* port,
              std::string_view resp404_html = {});
   ~HttpServer();
 
@@ -53,9 +53,6 @@ class HttpServer {
   // Enables WebSocket events.
   void EnableWebsockets();
 
-  // Starts the server.
-  void Start();
-
   // Adds an Endpoint handler for the given path_pattern.
   void RegisterEndpoint(const char* path_pattern, Endpoint* endpoint);
 
@@ -73,8 +70,6 @@ class HttpServer {
     RegisterEndpoint(path_pattern, &endpoint);
   }
 
-  mg_mgr& event_manager() { return event_manager_; }
-
  private:
   // Pumps events for the http server.
   void EventPumpRunLoop();
@@ -86,17 +81,11 @@ class HttpServer {
                                   void *event_data,
                                   void *user_data);
 
-  // Name for pump task.
-  const char* name_;
-
-  // Port to connect to. Usually ":80" is good.
-  const char* port_;
-
   // Document to return on a 404.
   std::string_view resp404_html_;
 
   // Event manager for all connections on this HTTP server.
-  mg_mgr event_manager_;
+  EventManager* event_manager_;
 
   // Bound connection to |port_|.
   mg_connection* connection_;

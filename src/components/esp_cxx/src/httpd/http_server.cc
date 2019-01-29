@@ -1,5 +1,6 @@
 #include "esp_cxx/httpd/http_server.h"
 
+#include "esp_cxx/httpd/event_manager.h"
 #include "esp_cxx/logging.h"
 
 namespace esp_cxx {
@@ -70,37 +71,22 @@ void HttpServer::Endpoint::OnHttpEventThunk(mg_connection *new_connection, int e
   }
 }
 
-HttpServer::HttpServer(const char* name, const char* port,
+HttpServer::HttpServer(EventManager* event_manager,
+                       const char* port,
                        std::string_view resp404_html)
-  : name_(name),
-    port_(port),
-    resp404_html_(resp404_html) {
-  mg_mgr_init(&event_manager_, this);
-  connection_ = mg_bind(&event_manager_, port_, &DefaultHandlerThunk, this);
+  : resp404_html_(resp404_html),
+    event_manager_(event_manager) {
+  connection_ = mg_bind(event_manager->underlying_manager(), port, &DefaultHandlerThunk, this);
 }
 
-HttpServer::~HttpServer() {
-  // TODO(awong): Destroya and join the pump task here.
-  mg_mgr_free(&event_manager_);
-}
+HttpServer::~HttpServer() = default;
 
 void HttpServer::EnableWebsockets() {
   mg_set_protocol_http_websocket(connection_);
 }
 
-void HttpServer::Start() {
-  // TODO(awong): Figure out the priority.
-  pump_task_ = Task::Create<HttpServer, &HttpServer::EventPumpRunLoop>(this, name_);
-}
-
 void HttpServer::RegisterEndpoint(const char* path_pattern, Endpoint* endpoint) {
   mg_register_http_endpoint(connection_, path_pattern, &Endpoint::OnHttpEventThunk, endpoint);
-}
-
-void HttpServer::EventPumpRunLoop() {
-  for(;;) {
-    mg_mgr_poll(&event_manager_, 1000000);
-  }
 }
 
 void HttpServer::DefaultHandlerThunk(struct mg_connection *nc,

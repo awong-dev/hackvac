@@ -1,5 +1,5 @@
 #ifndef ESPCXX_HTTPD_EVENT_MANAGER_H_
-#define  ESPCXX_HTTPD_EVENT_MANAGER_H_
+#define ESPCXX_HTTPD_EVENT_MANAGER_H_
 
 #include <array>
 #include <functional>
@@ -8,6 +8,7 @@
 #include "mongoose.h"
 
 namespace esp_cxx {
+
 class EventManager {
  public:
   EventManager();

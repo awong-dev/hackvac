@@ -11,7 +11,7 @@
 #endif
 
 #include "esp_cxx/gpio.h"
-#include "esp_cxx/httpd/event_manager.h"
+#include "esp_cxx/httpd/mongoose_event_manager.h"
 #include "esp_cxx/httpd/http_server.h"
 #include "esp_cxx/httpd/standard_endpoints.h"
 #include "esp_cxx/logging.h"
@@ -134,7 +134,7 @@ void cpp_entry() {
   std::string_view resp404_html(
       reinterpret_cast<const char*>(HTML_CONTENTS(resp404_html)),
       HTML_LEN(resp404_html));
-  EventManager event_manager;
+  MongooseEventManager event_manager;
   HttpServer http_server(&event_manager, ":8080", resp404_html);
   StandardEndpoints standard_endpoints(index_html);
   standard_endpoints.RegisterEndpoints(&http_server);

@@ -11,9 +11,11 @@
 
 namespace esp_cxx {
 
+class MongooseEventManager;
+
 class HttpServer {
  public:
-  HttpServer(EventManager* event_manager, const char* port,
+  HttpServer(MongooseEventManager* event_manager, const char* port,
              std::string_view resp404_html = {});
   ~HttpServer();
 
@@ -85,7 +87,7 @@ class HttpServer {
   std::string_view resp404_html_;
 
   // Event manager for all connections on this HTTP server.
-  EventManager* event_manager_;
+  MongooseEventManager* event_manager_;
 
   // Bound connection to |port_|.
   mg_connection* connection_;

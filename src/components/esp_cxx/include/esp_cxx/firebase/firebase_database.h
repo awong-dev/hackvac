@@ -8,7 +8,7 @@
 struct cJSON;
 
 namespace esp_cxx {
-class EventManager;
+class MongooseEventManager;
 
 class FirebaseDatabase {
  public:
@@ -17,7 +17,7 @@ class FirebaseDatabase {
       const std::string& host,
       const std::string& database,
       const std::string& listen_path,
-      EventManager* event_manager);
+      MongooseEventManager* event_manager);
   ~FirebaseDatabase();
 
   // Connects 
@@ -63,7 +63,7 @@ class FirebaseDatabase {
   std::string host_;
   std::string database_;
   std::string listen_path_;
-  EventManager* event_manager_;
+  MongooseEventManager* event_manager_;
 
   std::string real_host_;
   std::string session_id_;

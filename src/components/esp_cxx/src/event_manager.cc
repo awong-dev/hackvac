@@ -1,4 +1,4 @@
-#include "esp_cxx/httpd/event_manager.h"
+#include "esp_cxx/event_manager.h"
 
 #include <algorithm>
 #include <mutex>
@@ -9,47 +9,44 @@ void DoNothing(mg_connection* nc, int ev, void* ev_data, void* user_data) {
 }  // namespace
 
 namespace esp_cxx {
-EventManager::EventManager() {
-  mg_mgr_init(&event_manager_, this);
-}
 
 void EventManager::Add(std::function<void(void)> closure) {
   AddDelayed(std::move(closure), 0);
 }
 
-void EventManager::AddDelayed(std::function<void(void)> closure, int milliseconds) {
-  int now = 0; // TODO(awong): Get real time.
+void EventManager::AddDelayed(std::function<void(void)> closure, int delay_ms) {
+  auto run_at = std::chrono::steady_clock::now() +  std::chrono::milliseconds(delay_ms);
   {
     std::lock_guard<Mutex> lock(lock_);
     while (num_entries_ >= closures_.size()) {
-      // TODO(awong): Wait until there's space or drop?
+      // TODO(awong): Wait until there's space or drop? We need a cv.
     }
 
     num_entries_++;
-    closures_[(head_ + num_entries_) % closures_.size()] = {std::move(closure), now + milliseconds};
+    closures_[(head_ + num_entries_) % closures_.size()] = {std::move(closure), run_at};
 
     // Wake up the poll loop.
-    mg_broadcast(&event_manager_, &DoNothing, nullptr, 0);
+    Wake();
   }
 }
 
 void EventManager::Run() {
-  int next_wake = std::numeric_limits<int>::max();
+   TimePoint next_wake = TimePoint::max();
 
   for (;;) {
-    mg_mgr_poll(&event_manager_, next_wake);
+    Poll(next_wake - std::chrono::steady_clock::now());
     ClosureList to_run;
     int num_to_run = 0;
-    int now = 0; // TODO(awong): Actually call now.
-    next_wake = GetReadyClosures(&closures_, &num_to_run, now);
+    next_wake = GetReadyClosures(&closures_, &num_to_run, std::chrono::steady_clock::now());
     for (size_t i = 0; i < num_to_run; i++) {
       closures_[i].thunk();
     }
   }
 }
 
-int EventManager::GetReadyClosures(ClosureList* to_run, int* entries, int now) {
-  int next_wake = std::numeric_limits<int>::max();
+EventManager::TimePoint EventManager::GetReadyClosures(ClosureList* to_run, int* entries,
+                                   std::chrono::steady_clock::time_point now) {
+  TimePoint next_wake = TimePoint::max();
   *entries = 0;
   {
     std::lock_guard<Mutex> lock(lock_);

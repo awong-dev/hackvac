@@ -10,7 +10,7 @@
 #include "mongoose.h"
 
 namespace esp_cxx {
-class EventManager;
+class MongooseEventManager;
 
 // Based directly on the RFC Websocket protocol.
 // https://tools.ietf.org/html/rfc6455#page-65
@@ -63,7 +63,7 @@ class WebsocketSender {
 
 class WebsocketChannel {
  public:
-  WebsocketChannel(EventManager* event_manager, const std::string& ws_url);
+  WebsocketChannel(MongooseEventManager* event_manager, const std::string& ws_url);
   ~WebsocketChannel();
   using OnFrameCb = void (*)(WebsocketFrame frame);
 
@@ -85,7 +85,7 @@ class WebsocketChannel {
   void (*on_frame_cb_)(WebsocketFrame frame) = nullptr;
 
   // Event manager for all connections on this HTTP server.
-  EventManager* event_manager_;
+  MongooseEventManager* event_manager_;
 
   // URL to connect to.
   std::string ws_url_;

@@ -1,6 +1,6 @@
 #include "esp_cxx/httpd/http_server.h"
 
-#include "esp_cxx/httpd/event_manager.h"
+#include "esp_cxx/httpd/mongoose_event_manager.h"
 #include "esp_cxx/logging.h"
 
 namespace esp_cxx {
@@ -71,7 +71,7 @@ void HttpServer::Endpoint::OnHttpEventThunk(mg_connection *new_connection, int e
   }
 }
 
-HttpServer::HttpServer(EventManager* event_manager,
+HttpServer::HttpServer(MongooseEventManager* event_manager,
                        const char* port,
                        std::string_view resp404_html)
   : resp404_html_(resp404_html),

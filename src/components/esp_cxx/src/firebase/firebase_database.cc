@@ -1,5 +1,5 @@
 #include "esp_cxx/firebase/firebase_database.h"
-#include "esp_cxx/httpd/event_manager.h"
+#include "esp_cxx/httpd/mongoose_event_manager.h"
 
 #include <array>
 
@@ -26,7 +26,7 @@ FirebaseDatabase::FirebaseDatabase(
     const std::string& host,
     const std::string& database,
     const std::string& listen_path,
-    EventManager* event_manager)
+    MongooseEventManager* event_manager)
   : host_(host),
     database_(database),
     listen_path_(listen_path),

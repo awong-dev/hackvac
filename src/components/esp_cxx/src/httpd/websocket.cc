@@ -1,12 +1,12 @@
 #include "esp_cxx/httpd/websocket.h"
 
-#include "esp_cxx/httpd/event_manager.h"
+#include "esp_cxx/httpd/mongoose_event_manager.h"
 
 #include "esp_cxx/logging.h"
 
 namespace esp_cxx {
 
-WebsocketChannel::WebsocketChannel(EventManager* event_manager,
+WebsocketChannel::WebsocketChannel(MongooseEventManager* event_manager,
                                    const std::string& ws_url)
   : event_manager_(event_manager),
     ws_url_(ws_url) {

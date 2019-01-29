@@ -1,5 +1,7 @@
 #include "controller.h"
 
+#include <mutex>
+
 #include "esp_cxx/uart.h"
 #include "esp_cxx/logging.h"
 #include "event_log.h"
@@ -20,13 +22,13 @@ constexpr esp_cxx::Gpio kTstatRxPin = esp_cxx::Gpio::Pin<17>();
 namespace hackvac {
 
 StoredHvacSettings Controller::SharedData::GetStoredHvacSettings() const {
-  esp_cxx::AutoMutex lock_(&mutex_);
+  std::lock_guard<esp_cxx::Mutex> lock_(mutex_);
   return hvac_settings_;
 }
 
 void Controller::SharedData::SetStoredHvacSettings(const StoredHvacSettings& hvac_settings) {
   {
-    esp_cxx::AutoMutex lock_(&mutex_);
+    std::lock_guard<esp_cxx::Mutex> lock_(mutex_);
     hvac_settings_ = hvac_settings;
   }
   ESP_LOGI(kTag, "settings: p:%d m:%d, t:%d, f:%d, v:%d, wv:%d",
@@ -39,13 +41,13 @@ void Controller::SharedData::SetStoredHvacSettings(const StoredHvacSettings& hva
 }
 
 StoredExtendedSettings Controller::SharedData::GetExtendedSettings() const {
-  esp_cxx::AutoMutex lock_(&mutex_);
+  std::lock_guard<esp_cxx::Mutex> lock_(mutex_);
   return extended_settings_;
 }
 
 void Controller::SharedData::SetExtendedSettings(const StoredExtendedSettings& extended_settings) {
   {
-    esp_cxx::AutoMutex lock_(&mutex_);
+    std::lock_guard<esp_cxx::Mutex> lock_(mutex_);
     extended_settings_ = extended_settings;
   }
   ESP_LOGI(kTag, "extended settings: rt:%d",

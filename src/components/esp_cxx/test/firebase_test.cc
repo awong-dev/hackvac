@@ -66,6 +66,7 @@ const std::string_view kOverwriteRootResponse = R"(
 }  // namespace
 
 namespace esp_cxx {
+
 class Firebase : public ::testing::Test {
  protected:
   EventManager event_manager_;

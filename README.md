@@ -33,5 +33,5 @@ called `hackvac_setup` with setup `cn105rulez`.
 
 Unittests
 ```
-TEST_COMPONENTS=esp_cxx make -f Makefile.host V=1 host_build/hackvac_host 
+TEST_COMPONENTS=". esp_cxx" make -f Makefile.host V=1 host_build/hackvac_host 
 ```

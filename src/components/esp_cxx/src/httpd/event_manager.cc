@@ -1,6 +1,7 @@
 #include "esp_cxx/httpd/event_manager.h"
 
 #include <algorithm>
+#include <mutex>
 
 namespace {
 void DoNothing(mg_connection* nc, int ev, void* ev_data, void* user_data) {
@@ -19,7 +20,7 @@ void EventManager::Add(std::function<void(void)> closure) {
 void EventManager::AddDelayed(std::function<void(void)> closure, int milliseconds) {
   int now = 0; // TODO(awong): Get real time.
   {
-    AutoMutex lock(&lock_);
+    std::lock_guard<Mutex> lock(lock_);
     while (num_entries_ >= closures_.size()) {
       // TODO(awong): Wait until there's space or drop?
     }
@@ -51,7 +52,7 @@ int EventManager::GetReadyClosures(ClosureList* to_run, int* entries, int now) {
   int next_wake = std::numeric_limits<int>::max();
   *entries = 0;
   {
-    AutoMutex lock(&lock_);
+    std::lock_guard<Mutex> lock(lock_);
     int last_inserted = 0;
     for (int i = 0; i < num_entries_; i++) {
       if (closures_[i].run_at < now) {

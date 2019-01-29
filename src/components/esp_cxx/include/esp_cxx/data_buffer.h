@@ -2,6 +2,7 @@
 #define ESPCXX_DATA_BUFFER_H_
 
 #include <atomic>
+#include <mutex>
 
 #include "esp_cxx/mutex.h"
 
@@ -21,7 +22,7 @@ class DataBuffer {
   uint32_t dropped_elements() const { return dropped_elements_; }
   // Adds |obj| into the DataBuffer. If this overwrites 
   T Put(T&& obj) {
-    AutoMutex lock(&mutex_);
+    std::lock_guard<Mutex> lock(mutex_);
 
     swap(data_[queue_end_], obj);
     queue_end_ = (queue_end_ + 1) % size;
@@ -38,7 +39,7 @@ class DataBuffer {
   }
 
   bool Get(T* obj) {
-    AutoMutex lock(&mutex_);
+    std::lock_guard<Mutex> lock(mutex_);
 
     if (num_items_ == 0) {
       return false;

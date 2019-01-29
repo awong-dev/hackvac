@@ -17,14 +17,8 @@ MongooseEventManager::MongooseEventManager() {
 MongooseEventManager::~MongooseEventManager() {
 }
 
-void MongooseEventManager::Poll(Duration timeout_ms) {
-  auto raw_ms = std::chrono::duration_cast<std::chrono::milliseconds>(timeout_ms).count();
-  int actual_timeout_ms = std::numeric_limits<int>::max();
-  // Saturate at max int.
-  if (raw_ms < actual_timeout_ms) {
-    actual_timeout_ms = std::min(0, static_cast<int>(raw_ms));
-  }
-  mg_mgr_poll(underlying_manager(), actual_timeout_ms);
+void MongooseEventManager::Poll(int timeout_ms) {
+  mg_mgr_poll(underlying_manager(), timeout_ms);
 }
 
 void MongooseEventManager::Wake() {

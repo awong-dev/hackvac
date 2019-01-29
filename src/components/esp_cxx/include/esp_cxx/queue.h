@@ -39,6 +39,7 @@ class Queue {
   bool Peek(ElementType obj, int timeout_ms = 0) const;
   bool Pop(ElementType obj, int timeout_ms = 0);
   bool IsId(Id id) const { return id == queueset_fd_; }
+  Id id() const { return queueset_fd_; }
 
   decltype(auto) underlying() const { return queue_; }
 

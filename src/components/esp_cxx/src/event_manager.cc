@@ -3,11 +3,6 @@
 #include <algorithm>
 #include <mutex>
 
-namespace {
-void DoNothing(mg_connection* nc, int ev, void* ev_data, void* user_data) {
-}
-}  // namespace
-
 namespace esp_cxx {
 
 void EventManager::Add(std::function<void(void)> closure) {
@@ -34,7 +29,17 @@ void EventManager::Run() {
    TimePoint next_wake = TimePoint::max();
 
   for (;;) {
-    Poll(next_wake - std::chrono::steady_clock::now());
+    // Do the poll.
+    auto timeout_ms = next_wake - std::chrono::steady_clock::now();
+    auto raw_ms = std::chrono::duration_cast<std::chrono::milliseconds>(timeout_ms).count();
+    int actual_timeout_ms = std::numeric_limits<int>::max();
+    // Saturate at max int.
+    if (raw_ms < actual_timeout_ms) {
+      actual_timeout_ms = std::min(0, static_cast<int>(raw_ms));
+    }
+    Poll(actual_timeout_ms);
+
+    // Run the closures.
     ClosureList to_run;
     int num_to_run = 0;
     next_wake = GetReadyClosures(&closures_, &num_to_run, std::chrono::steady_clock::now());
@@ -65,6 +70,31 @@ EventManager::TimePoint EventManager::GetReadyClosures(ClosureList* to_run, int*
   std::make_heap(to_run->begin(), to_run->begin() + *entries);
   std::sort_heap(to_run->begin(), to_run->begin() + *entries);
   return next_wake;
+}
+
+// Initialize to 1 more than max events to allow for the Wake() call.
+QueueSetEventManager::QueueSetEventManager(int max_waiting_events)
+  : underlying_queue_set_(max_waiting_events + 1) {
+}
+
+void QueueSetEventManager::Add(Queue* queue,
+                               std::function<void(void)> on_data_cb) {
+  underlying_queue_set_.Add(queue);
+  callbacks_[queue->id()] = std::move(on_data_cb);
+}
+
+void QueueSetEventManager::Remove(Queue* queue) {
+  underlying_queue_set_.Remove(queue);
+  callbacks_.erase(queue->id());
+}
+
+void QueueSetEventManager::Poll(int timeout_ms) {
+  Queue::Id id = underlying_queue_set_.Select(timeout_ms);
+  callbacks_[id]();
+}
+
+void QueueSetEventManager::Wake() {
+  // TODO(awong): There should be a semaphore that we can signal.
 }
 
 }  // namespace esp_cxx

@@ -3,22 +3,16 @@
 
 #include <array>
 #include <functional>
+#include <unordered_map>
 
 #include "esp_cxx/mutex.h"
+#include "esp_cxx/queue.h"
 #include "mongoose.h"
 
 namespace esp_cxx {
 
 class EventManager {
  public:
-  using Duration = std::chrono::steady_clock::duration;
-  using TimePoint = std::chrono::steady_clock::time_point;
-
-  class Poller {
-   public:
-    virtual ~Poller() = default;
-  };
-
   // Will run |task| as soon as possible.
   void Add(std::function<void(void)> closure);
 
@@ -28,16 +22,17 @@ class EventManager {
   // Waits for next I/O event or task before waking up.
   void Run();
 
-//  mg_mgr* underlying_manager() { return &event_manager_; }
-
  protected:
   EventManager() = default;
   virtual ~EventManager() = default;
 
-  virtual void Poll(Duration timeout_ms) = 0;
+  virtual void Poll(int timeout_ms) = 0;
   virtual void Wake() = 0;
 
  private:
+  using Duration = std::chrono::steady_clock::duration;
+  using TimePoint = std::chrono::steady_clock::time_point;
+
   struct ClosureEntry {
     std::function<void(void)> thunk;
     TimePoint run_at = TimePoint::min();
@@ -56,6 +51,33 @@ class EventManager {
   ClosureList closures_;
   int num_entries_ = 0;
   int head_ = 0;
+};
+
+class QueueSetEventManager : public EventManager {
+ public:
+  // Initialize a event manager that waits on a QueueSet. The
+  // |max_waiting_events| size is the maximum queue length before data
+  // is dropped. It should be calculated based on the total size of all
+  // queues added to thie undelrying queueset.
+  //
+  // Note this number is NOT the number of cloures that are scheduled
+  // for the manager. That is a separate set of storge.
+  explicit QueueSetEventManager(int max_waiting_events);
+
+  void Add(Queue* queue, std::function<void(void)> on_data_cb);
+  void Remove(Queue* queue);
+
+  QueueSet* underlying_queue_set() { return &underlying_queue_set_; }
+
+ protected:
+  void Poll(int timeout_ms) override;
+  void Wake() override;
+
+ private:
+  // TODO(awong): Using an unordered_map here is overkill. Unsorted array
+  // is probably just fine.
+  std::unordered_map<Queue::Id, std::function<void(void)>> callbacks_;
+  QueueSet underlying_queue_set_;
 };
 
 }  // namespace esp_cxx

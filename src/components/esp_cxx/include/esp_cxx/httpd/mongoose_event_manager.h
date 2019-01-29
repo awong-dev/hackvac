@@ -17,7 +17,7 @@ class MongooseEventManager : public EventManager {
   mg_mgr* underlying_manager() { return &underlying_manager_; }
 
  private:
-  void Poll(Duration timeout_ms) override;
+  void Poll(int timeout_ms) override;
   void Wake() override;
 
   mg_mgr underlying_manager_;

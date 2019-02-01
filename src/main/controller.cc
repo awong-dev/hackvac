@@ -54,8 +54,9 @@ void Controller::SharedData::SetExtendedSettings(const StoredExtendedSettings& e
            static_cast<int32_t>(extended_settings.GetRoomTemp().value().whole_degree()));
 }
 
-Controller::Controller()
-  : hvac_control_("hvac_ctl", kCn105Uart, kCn105TxPin, kCn105RxPin,
+Controller::Controller(esp_cxx::QueueSetEventManager* event_manager)
+  : event_manager_(event_manager),
+    hvac_control_(event_manager_, kCn105Uart, kCn105TxPin, kCn105RxPin,
                   // TODO(awong): Send status to the controller about once a second.
                   // Sequence seems to be:
                   //    Info: kSettings,
@@ -66,7 +67,7 @@ Controller::Controller()
                   [this](std::unique_ptr<Cn105Packet> packet) {
                     this->OnHvacControlPacket(std::move(packet));
                   }),
-    thermostat_("tstat", kTstatUart, kTstatTxPin, kTstatRxPin,
+    thermostat_(event_manager_, kTstatUart, kTstatTxPin, kTstatRxPin,
                 [this](std::unique_ptr<Cn105Packet> packet) {
                   OnThermostatPacket(std::move(packet));
                 },
@@ -75,7 +76,7 @@ Controller::Controller()
                 },
                 esp_cxx::Gpio::Pin<23>(),
                 esp_cxx::Gpio::Pin<22>()),
-    hvac_packet_rx_queue_(10, sizeof(Cn105Packet*)) {  // TODO(awong): Pull out constant.
+    hvac_packet_rx_queue_(10) {  // TODO(awong): Pull out constant.
 }
 
 Controller::~Controller() {
@@ -101,7 +102,7 @@ void Controller::OnHvacControlPacket(
     // RX queue rather than take a callback. That'd make it symmetrical to the
     // HalfDuplexChannel::EnqueuePacket() API.
     Cn105Packet* raw_packet = hvac_packet.release();
-    hvac_packet_rx_queue_.Push(&raw_packet, 99999); // TODO(awong): Figure out max delay in MS.
+    hvac_packet_rx_queue_.Push(raw_packet, 99999); // TODO(awong): Figure out max delay in MS.
   }
 }
 
@@ -263,7 +264,6 @@ std::unique_ptr<Cn105Packet> Controller::AwaitPacketOfType(
   // use increasily smaller timeouts.
 
   Cn105Packet* packet = nullptr;
-
   while (hvac_packet_rx_queue_.Pop(&packet, timeout_ms)) {
     if (packet->type() == type) {
       return std::unique_ptr<Cn105Packet>(packet);

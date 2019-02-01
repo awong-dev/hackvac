@@ -35,6 +35,7 @@
 // packet is internally consistent. It also means updates to the Controller object
 // only get latched into effect at packet boundaries.
 
+#include "esp_cxx/event_manager.h"
 #include "esp_cxx/task.h"
 #include "esp_cxx/queue.h"
 
@@ -44,7 +45,7 @@ namespace hackvac {
 
 class Controller {
  public:
-  Controller();
+  explicit Controller(esp_cxx::QueueSetEventManager* event_manager);
   ~Controller();
 
   // Starts the message processing.
@@ -88,6 +89,9 @@ class Controller {
   // Sets the state.
   bool is_passthru_ = false;
 
+  // Event manager for handling all incoming data.
+  esp_cxx::QueueSetEventManager* event_manager_;
+
   // Channel talking to the HVAC control unit.
   HalfDuplexChannel hvac_control_;
 
@@ -99,7 +103,7 @@ class Controller {
   esp_cxx::Task control_task_;
 
   // Queue of packets received from |hvac_control_|
-  esp_cxx::Queue hvac_packet_rx_queue_;
+  esp_cxx::Queue<Cn105Packet*> hvac_packet_rx_queue_;
 
   // Asynchronous logger to track protocol interactions.
   esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacketThunk> packet_logger_{"packets"};

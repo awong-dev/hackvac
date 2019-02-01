@@ -13,14 +13,23 @@ namespace esp_cxx {
 
 class EventManager {
  public:
+  using Duration = std::chrono::steady_clock::duration;
+  using TimePoint = std::chrono::steady_clock::time_point;
+
   // Will run |task| as soon as possible.
-  void Add(std::function<void(void)> closure);
+  void Run(std::function<void(void)> closure);
 
   // Will run |task| at least milliseconds after this is called.
-  void AddDelayed(std::function<void(void)> closure, int milliseconds);
+  void RunDelayed(std::function<void(void)> closure, int milliseconds);
+
+  // Will run |task| on or after |run_after|.  If |run_after| is in the past,
+  // closure will execute as soon as the event loop is free. It is possible
+  // to starve a task if callers keeps passing |run_after| at earlier time
+  // points. Don't do that.
+  void RunAfter(std::function<void(void)> closure, TimePoint run_after);
 
   // Waits for next I/O event or task before waking up.
-  void Run();
+  void Loop();
 
  protected:
   EventManager() = default;
@@ -30,13 +39,10 @@ class EventManager {
   virtual void Wake() = 0;
 
  private:
-  using Duration = std::chrono::steady_clock::duration;
-  using TimePoint = std::chrono::steady_clock::time_point;
-
   struct ClosureEntry {
     std::function<void(void)> thunk;
-    TimePoint run_at = TimePoint::min();
-    bool operator<(const ClosureEntry& other) const { return run_at < other.run_at; }
+    TimePoint run_after = TimePoint::min();
+    bool operator<(const ClosureEntry& other) const { return run_after < other.run_after; }
   };
   using ClosureList = std::array<ClosureEntry, 10>;
 
@@ -64,8 +70,8 @@ class QueueSetEventManager : public EventManager {
   // for the manager. That is a separate set of storge.
   explicit QueueSetEventManager(int max_waiting_events);
 
-  void Add(Queue* queue, std::function<void(void)> on_data_cb);
-  void Remove(Queue* queue);
+  void Add(QueueBase* queue, std::function<void(void)> on_data_cb);
+  void Remove(QueueBase* queue);
 
   QueueSet* underlying_queue_set() { return &underlying_queue_set_; }
 
@@ -76,7 +82,7 @@ class QueueSetEventManager : public EventManager {
  private:
   // TODO(awong): Using an unordered_map here is overkill. Unsorted array
   // is probably just fine.
-  std::unordered_map<Queue::Id, std::function<void(void)>> callbacks_;
+  std::unordered_map<QueueBase::Id, std::function<void(void)>> callbacks_;
   QueueSet underlying_queue_set_;
 };
 

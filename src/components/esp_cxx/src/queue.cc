@@ -18,20 +18,19 @@ std::chrono::time_point<std::chrono::steady_clock> ToAbsTime(int rel_time_ms) {
 
 namespace esp_cxx {
 
-Queue::Queue() = default;
+QueueBase::QueueBase() = default;
 
 #ifndef FAKE_ESP_IDF
-Queue::Queue(int num_elements, size_t element_size) 
-  : queue_(xQueueCreate(num_elements, sizeof(ElementType))) {
+QueueBase::QueueBase(int num_elements, size_t element_size) 
+  : queue_(xQueueCreate(num_elements, element_size)) {
 }
 #else
-Queue::Queue(int num_elements, size_t element_size) 
-  : queue_(new std::queue<ElementType>()),
-    max_items_(num_elements) {
+QueueBase::QueueBase(int num_elements, size_t element_size) 
+  : max_items_(num_elements), element_size_(element_size) {
 }
 #endif
 
-Queue::~Queue() {
+QueueBase::~QueueBase() {
 #ifndef FAKE_ESP_IDF
   if (queue_) {
     vQueueDelete(queue_);
@@ -40,13 +39,13 @@ Queue::~Queue() {
 #endif
 }
 
-bool Queue::Push(const ElementType obj, int timeout_ms) {
+bool QueueBase::RawPush(const void* obj, int timeout_ms) {
 #ifndef FAKE_ESP_IDF
   return xQueueSend(queue_, obj, timeout_ms / portTICK_PERIOD_MS) == pdTRUE;
 #else
   std::unique_lock<std::mutex> lock(lock_);
   auto abs_timeout = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
-  while (queue_->size() >= max_items_) {
+  while (queue_.size() >= max_items_) {
     // Wait until a dequeue, but fall back into the wait if someone raced an push.
     if (on_pop_.wait_until(lock, abs_timeout) == std::cv_status::timeout) {
       return false;
@@ -54,20 +53,22 @@ bool Queue::Push(const ElementType obj, int timeout_ms) {
   }
 
   // If here, there is space in the queue.
-  queue_->push(obj);
+  std::unique_ptr<char[]> buf(new char[element_size_]);
+  memcpy(&buf[0], obj, element_size_);
+  queue_.push(std::move(buf));
   on_push_.notify_one();
 
   return true;
 #endif
 }
 
-bool Queue::Peek(ElementType obj, int timeout_ms) const {
+bool QueueBase::RawPeek(void* obj, int timeout_ms) const {
 #ifndef FAKE_ESP_IDF
   return xQueuePeek(queue_, obj, timeout_ms / portTICK_PERIOD_MS) == pdTRUE;
 #else
   std::unique_lock<std::mutex> lock(lock_);
   auto abs_timeout = ToAbsTime(timeout_ms);
-  while (queue_->empty()) {
+  while (queue_.empty()) {
     // Wait until a dequeue, but fall back into the wait if someone raced an push.
     if (on_push_.wait_until(lock, abs_timeout) == std::cv_status::timeout) {
       return false;
@@ -75,19 +76,19 @@ bool Queue::Peek(ElementType obj, int timeout_ms) const {
   }
 
   // If here, there is an element.
-  obj = queue_->front();
+  memcpy(obj, &queue_.front()[0], element_size_);
 
   return true;
 #endif
 }
 
-bool Queue::Pop(void* obj, int timeout_ms) {
+bool QueueBase::RawPop(void* obj, int timeout_ms) {
 #ifndef FAKE_ESP_IDF
   return xQueueReceive(queue_, obj, timeout_ms / portTICK_PERIOD_MS) == pdTRUE;
 #else
   std::unique_lock<std::mutex> lock(lock_);
   auto abs_timeout = ToAbsTime(timeout_ms);
-  while (queue_->empty()) {
+  while (queue_.empty()) {
     // Wait until a dequeue, but fall back into the wait if someone raced an push.
     if (on_push_.wait_until(lock, abs_timeout) == std::cv_status::timeout) {
       return false;
@@ -95,8 +96,8 @@ bool Queue::Pop(void* obj, int timeout_ms) {
   }
 
   // If here, there is an element.
-  obj = queue_->front();
-  queue_->pop();
+  memcpy(obj, &queue_.front()[0], element_size_);
+  queue_.pop();
   on_pop_.notify_one();
 
   return true;
@@ -120,7 +121,7 @@ QueueSet::~QueueSet() {
 #endif
 }
 
-void QueueSet::Add(Queue* queue) {
+void QueueSet::Add(QueueBase* queue) {
 #ifndef FAKE_ESP_IDF
   xQueueAddToSet(queue->queue_, queue_set_);
 #else
@@ -133,7 +134,7 @@ void QueueSet::Add(Queue* queue) {
 #endif
 }
 
-void QueueSet::Remove(Queue* queue) {
+void QueueSet::Remove(QueueBase* queue) {
 #ifndef FAKE_ESP_IDF
   xQueueRemoveFromSet(queue->queue_, queue_set_);
 #else
@@ -151,9 +152,9 @@ void QueueSet::Remove(Queue* queue) {
 #endif
 }
 
-Queue::Id QueueSet::Select(int timeout_ms) {
+QueueBase::Id QueueSet::Select(int timeout_ms) {
 #ifndef FAKE_ESP_IDF
-  return reinterpret_cast<Queue::Id>(
+  return reinterpret_cast<QueueBase::Id>(
       xQueueSelectFromSet(queue_set_, timeout_ms / portTICK_PERIOD_MS));
 #else
   struct timeval tv = {

@@ -2,8 +2,10 @@
 #define ESPCXX_QUEUE_H_
 
 #include <cstdint>
-#include <utility>
 #include <limits>
+#include <utility>
+
+#include "esp_cxx/cxx17hack.h"
 
 #ifndef FAKE_ESP_IDF
 #include "freertos/FreeRTOS.h"
@@ -18,30 +20,26 @@
 
 namespace esp_cxx {
 
-class Queue {
+class QueueBase {
  public:
   using Id = intptr_t;
-  using ElementType = void*;
-  // TODO(awong): Fix to be actual max. And make sure to stop the hokey kScaleDelay
-  // in queue.cc otherwise this will infinite loop.
-  static constexpr int kMaxWait = 99999;
 
-  Queue();
-  Queue(int num_elements, size_t element_size);
-  ~Queue();
+  QueueBase();  // Needed by UART API since it initializes the queue late.
+  QueueBase(int num_elements, size_t element_size);
+  ~QueueBase();
 
 #ifndef FAKE_ESP_IDF
   // Takes ownership of an externally created FreeRTOS queue.
-  explicit Queue(QueueHandle_t queue) : queue_(queue) {}
+  explicit QueueBase(QueueHandle_t queue) : queue_(queue) {}
 #endif
 
-  bool Push(const ElementType obj, int timeout_ms = 0);
-  bool Peek(ElementType obj, int timeout_ms = 0) const;
-  bool Pop(ElementType obj, int timeout_ms = 0);
   bool IsId(Id id) const { return id == queueset_fd_; }
   Id id() const { return queueset_fd_; }
 
-  decltype(auto) underlying() const { return queue_; }
+ protected:
+  bool RawPush(const void* obj, int timeout_ms = 0);
+  bool RawPeek(void* obj, int timeout_ms = 0) const;
+  bool RawPop(void* obj, int timeout_ms = 0);
 
  private:
 #ifndef FAKE_ESP_IDF
@@ -53,11 +51,39 @@ class Queue {
   mutable std::condition_variable on_push_{};
   std::condition_variable on_pop_{};
 
-  std::queue<ElementType>* queue_;
+  std::queue<std::unique_ptr<char[]>> queue_;
   int max_items_ = 0;
+  int element_size_ = 0;
 
   int queueset_fd_ = -1;  // Wake signal.
 #endif
+};
+
+template <typename T>
+class Queue : public QueueBase {
+ public:
+  // TODO(awong): There should be a "Taint"
+  Queue() = default;
+
+  explicit Queue(int max_items)
+    : QueueBase(max_items, sizeof(T)) {}
+
+#ifndef FAKE_ESP_IDF
+  // Takes ownership of an externally created FreeRTOS queue.
+  explicit Queue(QueueHandle_t queue) : QueueBase(queue) {}
+#endif
+
+  bool Push(const T& obj, int timeout_ms = 0) {
+    return RawPush(reinterpret_cast<const void*>(&obj), timeout_ms);
+  }
+
+  bool Peek(T* obj, int timeout_ms = 0) {
+    return RawPeek(obj, timeout_ms);
+  }
+
+  bool Pop(T* obj, int timeout_ms = 0) {
+    return RawPop(obj, timeout_ms);
+  }
 };
 
 class QueueSet {
@@ -67,10 +93,10 @@ class QueueSet {
   explicit QueueSet(int max_items);
   ~QueueSet();
 
-  void Add(Queue* queue);
-  void Remove(Queue* queue);
+  void Add(QueueBase* queue);
+  void Remove(QueueBase* queue);
 
-  Queue::Id Select(int timeout_ms);
+  QueueBase::Id Select(int timeout_ms);
 
  private:
 #ifndef FAKE_ESP_IDF

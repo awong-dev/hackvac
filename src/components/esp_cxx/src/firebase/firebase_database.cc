@@ -264,7 +264,7 @@ void FirebaseDatabase::MergePath(const char* path, unique_cJSON_ptr new_data) {
 void FirebaseDatabase::SendKeepalive() {
   static constexpr int kKeepAliveMs = 45000;
   websocket_.SendText("0");
-  event_manager_->AddDelayed([&] {SendKeepalive();}, kKeepAliveMs);
+  event_manager_->RunDelayed([&] {SendKeepalive();}, kKeepAliveMs);
 }
 
 }  // namespace esp_cxx

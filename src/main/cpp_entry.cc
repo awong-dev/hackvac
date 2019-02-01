@@ -123,9 +123,11 @@ void cpp_entry() {
     ESP_LOGE(kTag, "Failed to connect to AP OR create a Setup Network.");
   }
 
-  // Initialize hackvac controller.
-  static hackvac::Controller controller;
+  // Initialize hackvac controller and run on higher priority thread.
+  QueueSetEventManager controller_event_manager(100);  // TODO(awong): Size this.
+  static hackvac::Controller controller(&controller_event_manager);
   controller.Start();
+  Task network_task = Task::Create<EventManager, &EventManager::Loop>(&controller_event_manager, "controller");
 
   // Run webserver.
   std::string_view index_html(
@@ -134,14 +136,10 @@ void cpp_entry() {
   std::string_view resp404_html(
       reinterpret_cast<const char*>(HTML_CONTENTS(resp404_html)),
       HTML_LEN(resp404_html));
-  MongooseEventManager event_manager;
-  HttpServer http_server(&event_manager, ":8080", resp404_html);
+  MongooseEventManager net_event_manager;
+  HttpServer http_server(&net_event_manager, ":8080", resp404_html);
   StandardEndpoints standard_endpoints(index_html);
   standard_endpoints.RegisterEndpoints(&http_server);
-  Task network_task = Task::Create<EventManager, &EventManager::Run>(&event_manager, "net");
 
-  // TODO(awong): Add idle task hook ot sleep. Use hte ESP32-IDF hooks and don't create a task directly.
-  for (;;) {
-    sleep(1000);
-  }
+  net_event_manager.Loop();
 }

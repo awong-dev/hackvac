@@ -67,7 +67,7 @@ enum EventType {
   Uart(Chip chip, Gpio tx_pin, Gpio rx_pin,
        int baud_rate, Mode mode);
 
-  void Start(Queue* rx_queue, size_t rx_queue_length);
+  void Start(Queue<Event>* rx_queue, size_t rx_queue_length);
 
   int Read(uint8_t*buf, size_t size);
   void Write(const uint8_t* buf, size_t size);

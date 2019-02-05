@@ -1,6 +1,8 @@
 #ifndef CN105_H_
 #define CN105_H_
 
+#include <deque>
+
 #include "half_duplex_channel.h"
 #include "cn105_protocol.h"
 
@@ -55,6 +57,8 @@ class Controller {
   void set_passthru(bool is_passthru) { is_passthru_ = is_passthru; }
   bool is_passthru() { return is_passthru_; }
 
+  void SetTemperature(HalfDegreeTemp temp);
+
  private:
   // Runs on the |hvac_control_| channel's message pump task.
   void OnHvacControlPacket(std::unique_ptr<Cn105Packet> hvac_packet);
@@ -75,6 +79,11 @@ class Controller {
   // Queries/Pushes extended settings over the |hvac_control_| channel.
   std::optional<ExtendedSettings> QueryExtendedSettings();
   bool PushExtendedSettings(const StoredExtendedSettings& extended_settings);
+
+  // Starts the next command in |command_queue_|. This the start of the logical
+  // protocol actions and is invoked either on a timer, as a sideffect of a
+  // public method call, or in response a packet or uart event.
+  void ExecuteNextCommand();
 
   // Reads and discards packets from |hvac_packet_rx_queue_| until a packet
   // of |type| found.
@@ -98,9 +107,29 @@ class Controller {
   // Channel talking to the thermosat.
   HalfDuplexChannel thermostat_;
 
-  // Task that publishes settings changes to the HVAC control unit.
-  // Does do anything if |is_passthru_|.
-  esp_cxx::Task control_task_;
+  enum class ChatterState {
+    kDisconnected,
+    kWaitingConnectAck,
+    kWaitingInfoAck,
+    kWaitingExtendedInfoAck,
+    kWaitingUpdateAck,
+    kWaitingExtendedUpdateAck,
+  };
+  ChatterState chatter_state_ = ChatterState::kDisconnected;
+
+  // Whether or not the hvac_control_ is connected.
+  bool is_connected_ = false;
+
+  enum class Command : uint8_t {
+    kConnect,
+    kQuerySettings,
+    kQueryExtendedSettings,
+    kPushSettings,
+    kPushExtendedSettings,
+  };
+  std::deque<Command> command_queue_;
+  unsigned int command_number_ = 0;
+  bool is_command_oustanding_ = false;
 
   // Queue of packets received from |hvac_control_|
   esp_cxx::Queue<Cn105Packet*> hvac_packet_rx_queue_;
@@ -112,9 +141,9 @@ class Controller {
   class SharedData {
    public:
     StoredHvacSettings GetStoredHvacSettings() const;
-    void SetStoredHvacSettings(const StoredHvacSettings& hvac_settings);
+    void SetStoredHvacSettings(const HvacSettings& hvac_settings);
     StoredExtendedSettings GetExtendedSettings() const;
-    void SetExtendedSettings(const StoredExtendedSettings& extended_settings);
+    void SetExtendedSettings(const ExtendedSettings& extended_settings);
 
    private:
     mutable esp_cxx::Mutex mutex_;

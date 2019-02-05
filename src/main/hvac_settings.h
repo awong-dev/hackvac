@@ -258,6 +258,8 @@ class HvacSettings {
   std::optional<HalfDegreeTemp> GetTargetTemp() const;
   void SetTargetTemp(std::optional<HalfDegreeTemp> target_temp);
 
+  const uint8_t* data_pointer() const { return data_ptr_; }
+
  protected:
   void set_data_pointer(uint8_t* ptr) { data_ptr_ = ptr; }
 
@@ -270,7 +272,7 @@ class HvacSettings {
 };
 
 // HvacSettings that provides its own storage. This is likely most often
-// used to act=ually store the settings whereas HvacSettings can be used
+// used to actually store the settings whereas HvacSettings can be used
 // to parse a chunk of data out of a received packet.
 class StoredHvacSettings : public HvacSettings {
  public:
@@ -278,7 +280,13 @@ class StoredHvacSettings : public HvacSettings {
     set_data_pointer(data_.data());
   }
 
+  StoredHvacSettings& operator=(const HvacSettings& rhs) {
+    memcpy(data_.begin(), rhs.data_pointer(), data_.size());
+    return *this;
+  }
+
   void MergeUpdate(const HvacSettings& settings_update) {
+    // TODO(awong): Implement.
   }
     
   // Returns the raw wireformat data bytes for an update packet. The
@@ -305,6 +313,8 @@ class ExtendedSettings {
 
   std::optional<HalfDegreeTemp> GetRoomTemp() const;
 
+  const uint8_t* data_pointer() const { return data_ptr_; }
+
  protected:
   void set_data_pointer(uint8_t* ptr) { data_ptr_ = ptr; }
 
@@ -316,6 +326,11 @@ class StoredExtendedSettings : public ExtendedSettings {
  public:
   StoredExtendedSettings() : ExtendedSettings(nullptr) {
     set_data_pointer(data_.data());
+  }
+
+  StoredExtendedSettings& operator=(const ExtendedSettings& rhs) {
+    memcpy(data_.begin(), rhs.data_pointer(), data_.size());
+    return *this;
   }
 
   const std::array<uint8_t, 16>& encoded_bytes() const { return data_; }

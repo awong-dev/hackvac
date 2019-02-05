@@ -110,8 +110,8 @@ void cpp_entry() {
 #endif
 
   // Silly debug tasks.
-  Task blink_task(&blink_task_func, nullptr, "blink_task");
-  Task uptime_task(&uptime_task_func, nullptr, "uptime_task");
+//  Task blink_task(&blink_task_func, nullptr, "blink_task");
+//  Task uptime_task(&uptime_task_func, nullptr, "uptime_task");
   RunOtaWatchdog();
 
   // Setup Wifi access.
@@ -127,7 +127,7 @@ void cpp_entry() {
   QueueSetEventManager controller_event_manager(100);  // TODO(awong): Size this.
   static hackvac::Controller controller(&controller_event_manager);
   controller.Start();
-  Task network_task = Task::Create<EventManager, &EventManager::Loop>(&controller_event_manager, "controller");
+  Task controller_task = Task::Create<EventManager, &EventManager::Loop>(&controller_event_manager, "controller");
 
   // Run webserver.
   std::string_view index_html(

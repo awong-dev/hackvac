@@ -26,7 +26,7 @@ StoredHvacSettings Controller::SharedData::GetStoredHvacSettings() const {
   return hvac_settings_;
 }
 
-void Controller::SharedData::SetStoredHvacSettings(const StoredHvacSettings& hvac_settings) {
+void Controller::SharedData::SetStoredHvacSettings(const HvacSettings& hvac_settings) {
   {
     std::lock_guard<esp_cxx::Mutex> lock_(mutex_);
     hvac_settings_ = hvac_settings;
@@ -45,7 +45,7 @@ StoredExtendedSettings Controller::SharedData::GetExtendedSettings() const {
   return extended_settings_;
 }
 
-void Controller::SharedData::SetExtendedSettings(const StoredExtendedSettings& extended_settings) {
+void Controller::SharedData::SetExtendedSettings(const ExtendedSettings& extended_settings) {
   {
     std::lock_guard<esp_cxx::Mutex> lock_(mutex_);
     extended_settings_ = extended_settings;
@@ -65,7 +65,10 @@ Controller::Controller(esp_cxx::QueueSetEventManager* event_manager)
                   //
                   //    Needs periodic task to does an EnqueuePacket() and waits for responses.
                   [this](std::unique_ptr<Cn105Packet> packet) {
-                    this->OnHvacControlPacket(std::move(packet));
+                    OnHvacControlPacket(std::move(packet));
+                  },
+                  [this](std::unique_ptr<Cn105Packet> packet) {
+                    packet_logger_.Log(std::move(packet));
                   }),
     thermostat_(event_manager_, kTstatUart, kTstatTxPin, kTstatRxPin,
                 [this](std::unique_ptr<Cn105Packet> packet) {
@@ -85,9 +88,69 @@ Controller::~Controller() {
 void Controller::Start() {
   hvac_control_.Start();
   thermostat_.Start();
+  command_queue_.push_back(Command::kConnect);
+  ExecuteNextCommand();
+}
 
-  control_task_ = esp_cxx::Task::Create<Controller, &Controller::ControlTaskRunLoop>(
-      this, "controller", 4096, 4);
+void Controller::SetTemperature(HalfDegreeTemp temp) {
+  StoredHvacSettings new_settings = shared_data_.GetStoredHvacSettings();
+  new_settings.SetTargetTemp(temp);
+  shared_data_.SetStoredHvacSettings(new_settings);
+
+  event_manager_->Run(
+      [this]{
+        command_queue_.push_back(Command::kPushSettings);
+        ExecuteNextCommand();
+      });
+}
+
+void Controller::ExecuteNextCommand() {
+  // A new command can cause this loop to enter before the current command
+  // is complete. In this case, just return as command completion will
+  // cause this function to execute again.
+  if (!is_command_oustanding_) {
+    return;
+  }
+
+  if (command_queue_.empty()) {
+    return;
+  }
+  Command command = command_queue_.front();
+  command_queue_.pop_front();
+
+  switch (command) {
+    case Command::kConnect:
+      hvac_control_.EnqueuePacket(ConnectPacket::Create());
+      break;
+
+    case Command::kQuerySettings:
+      hvac_control_.EnqueuePacket(InfoPacket::Create(CommandType::kSettings));
+      break;
+
+    case Command::kQueryExtendedSettings:
+      hvac_control_.EnqueuePacket(InfoPacket::Create(CommandType::kExtendedSettings));
+      break;
+
+    case Command::kPushSettings:
+      hvac_control_.EnqueuePacket(UpdatePacket::Create(shared_data_.GetStoredHvacSettings()));
+      break;
+
+    case Command::kPushExtendedSettings:
+      hvac_control_.EnqueuePacket(UpdatePacket::Create(shared_data_.GetExtendedSettings()));
+      break;
+  }
+
+  command_number_++;
+  is_command_oustanding_ = false;
+  constexpr int kProtocolTimeoutMs = 20;
+  event_manager_->RunDelayed(
+      [this, prev_command_number = command_number_] {
+        if (prev_command_number == command_number_ &&
+            !is_command_oustanding_) {
+          command_queue_.push_front(Command::kConnect);
+          ExecuteNextCommand();
+        }
+      }, kProtocolTimeoutMs);
 }
 
 void Controller::OnHvacControlPacket(
@@ -97,13 +160,57 @@ void Controller::OnHvacControlPacket(
     ESP_LOG_BUFFER_HEX_LEVEL(kTag, hvac_packet->raw_bytes(), hvac_packet->packet_size(), ESP_LOG_INFO); 
     thermostat_.EnqueuePacket(std::move(hvac_packet));
     return;
-  } else {
-    // TODO(awong): Decide if HalfDuplexChannel should exclusively expose a
-    // RX queue rather than take a callback. That'd make it symmetrical to the
-    // HalfDuplexChannel::EnqueuePacket() API.
-    Cn105Packet* raw_packet = hvac_packet.release();
-    hvac_packet_rx_queue_.Push(raw_packet, 99999); // TODO(awong): Figure out max delay in MS.
   }
+
+  if (hvac_packet->IsJunk()) {
+    // Junk is likely either be line-noise or a desyced packet start. Ignore.
+    return;
+  }
+
+  if (!hvac_packet->IsComplete()) {
+    // An incomplete packet means something timed out. Reconnect.
+    command_queue_.push_front(Command::kConnect);
+    ExecuteNextCommand();
+    return;
+  }
+
+  // If a complete packet is found, then consider that to indicate a command
+  // has triggered some sort of structurally valid response from the unit and
+  // thus the command has not timed out.
+  is_command_oustanding_ = true;
+
+  if (!hvac_packet->IsChecksumValid()) {
+    // TODO(awong): Increment error count.
+    ESP_LOGW(kTag, "Pkt type %d corrupt", static_cast<int>(hvac_packet->type()));
+    return;
+  }
+
+  switch (hvac_packet->type()) {
+    case PacketType::kConnectAck:
+    case PacketType::kExtendedConnectAck:
+    case PacketType::kUpdateAck:
+      // Nothing to do here.
+      break;
+
+    case PacketType::kInfoAck: {
+      // Nothing to do here.
+      InfoAckPacket info_ack(hvac_packet.get());
+      if (auto settings = info_ack.settings()) {
+        shared_data_.SetStoredHvacSettings(settings.value());
+      }
+
+      if (auto extended_settings = info_ack.extended_settings()) {
+        shared_data_.SetExtendedSettings(extended_settings.value());
+      }
+      break;
+    }
+
+    default:
+      ESP_LOGW(kTag, "Unexpected packet type: %d", static_cast<int>(hvac_packet->type()));
+      break;
+  }
+
+  ExecuteNextCommand();
 }
 
 void Controller::OnThermostatPacket(
@@ -154,124 +261,6 @@ void Controller::OnThermostatPacket(
 
     packet_logger_.Log(std::move(thermostat_packet));
   }
-}
-
-void Controller::ControlTaskRunLoop() {
-  bool is_connected_ = false;
-  for (;;) {
-    // TODO(awong):
-    //   First determine if we have established contact with controller.
-    //   If not, then initiaite connect sequence.
-    //
-    //   If connected, then enter 1s sleep loop. Every 1 s, get info from
-    //   controller and publish status updates as necessary. The chatter
-    //   sequence is Info:normal, Info:extended, Update:Normal, Update:Extended
-    //
-    //   On publish, send, and then sleep until update is received from
-    //     OnHvacControlPacket. We need a queue. :-/
-    //
-    //   When waiting, try best to semantically process all packets until expected
-    //     one is found, and the continue to chatter sequence.
-    //
-    //   In the event of a full timeout, update error count. Send channel reset
-    //     sequence (crib for PAC-444CN-1). Then restart connect sequence.
-
-    while (!is_connected_) {
-      is_connected_ = DoConnect();
-    }
-
-    bool at_least_one_suceeded = false;
-    // Start chatter sequence by requesting state from HVAC controller.
-    std::optional<HvacSettings> settings = QuerySettings();
-    at_least_one_suceeded |= !!settings;
-    std::optional<ExtendedSettings> hvac_extended_settings = QueryExtendedSettings();
-    at_least_one_suceeded |= !!hvac_extended_settings;
-    StoredHvacSettings current_settings = shared_data_.GetStoredHvacSettings();
-    StoredExtendedSettings current_extended_settings = shared_data_.GetExtendedSettings();
-
-    // TODO(awong): Log the diff from the current state.
-
-    if (!PushSettings(current_settings)) {
-      ESP_LOGW(kTag, "Failed settings update");
-      is_connected_ = false;
-    }
-
-    if (!PushExtendedSettings(current_extended_settings)) {
-      ESP_LOGW(kTag, "Failed extended settings update");
-      is_connected_ = false;
-    }
-
-    // Wait 1 second between chatter bursts.
-    esp_cxx::Task::Delay(1000);
-  }
-}
-
-bool Controller::DoConnect() {
-  hvac_control_.EnqueuePacket(ConnectPacket::Create());
-  std::unique_ptr<Cn105Packet> connect_ack =
-    AwaitPacketOfType(PacketType::kConnectAck);
-  // TODO(awong): How should we handle corrupt but still parsable packets?
-  return connect_ack && connect_ack->IsChecksumValid();
-}
-
-// Queries/Pushes settings over the |hvac_control_| channel.
-std::optional<HvacSettings> Controller::QuerySettings() {
-  hvac_control_.EnqueuePacket(InfoPacket::Create(CommandType::kSettings));
-  std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kInfoAck);
-  InfoAckPacket info_ack(raw_ack.get());
-
-  if (info_ack.IsValid() && info_ack.type() == CommandType::kSettings) {
-    return info_ack.settings();
-  }
-
-  return {};
-}
-
-bool Controller::PushSettings(const StoredHvacSettings& settings) {
-//  hvac_control_.EnqueuePacket(UpdatePacket::Create(settings));
-  std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kUpdateAck);
-  UpdateAckPacket update_ack(raw_ack.get());
-
-  return update_ack.IsValid() && update_ack.type() == CommandType::kSettings;
-}
-
-// Queries/Pushes extended settings over the |hvac_control_| channel.
-std::optional<ExtendedSettings> Controller::QueryExtendedSettings() {
-  hvac_control_.EnqueuePacket(InfoPacket::Create(CommandType::kExtendedSettings));
-  std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kInfoAck);
-  InfoAckPacket info_ack(raw_ack.get());
-
-  // TODO(awong) : Fold this back into the packet.
-  if (info_ack.IsValid() && info_ack.type() == CommandType::kExtendedSettings) {
-    return info_ack.extended_settings();
-  }
-
-  return {};
-}
-
-bool Controller::PushExtendedSettings(
-    const StoredExtendedSettings& extended_settings) {
-  hvac_control_.EnqueuePacket(UpdatePacket::Create(extended_settings));
-  std::unique_ptr<Cn105Packet> raw_ack = AwaitPacketOfType(PacketType::kUpdateAck);
-  UpdateAckPacket update_ack(raw_ack.get());
-
-  return update_ack.IsValid() && update_ack.type() == CommandType::kExtendedSettings;
-}
-
-std::unique_ptr<Cn105Packet> Controller::AwaitPacketOfType(
-    PacketType type, int timeout_ms) {
-  // TODO(awong): The timeout code is incorrect as multiple receives should
-  // use increasily smaller timeouts.
-
-  Cn105Packet* packet = nullptr;
-  while (hvac_packet_rx_queue_.Pop(&packet, timeout_ms)) {
-    if (packet->type() == type) {
-      return std::unique_ptr<Cn105Packet>(packet);
-    } else {
-      delete packet;
-    }
-  }
-  return {};
 }
 
 std::unique_ptr<Cn105Packet> Controller::CreateInfoAck(InfoPacket info) {

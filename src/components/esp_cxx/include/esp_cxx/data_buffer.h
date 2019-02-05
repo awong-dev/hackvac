@@ -1,6 +1,7 @@
 #ifndef ESPCXX_DATA_BUFFER_H_
 #define ESPCXX_DATA_BUFFER_H_
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 
@@ -24,7 +25,7 @@ class DataBuffer {
   T Put(T&& obj) {
     std::lock_guard<Mutex> lock(mutex_);
 
-    swap(data_[queue_end_], obj);
+    std::swap(data_[queue_end_], obj);
     queue_end_ = (queue_end_ + 1) % size;
 
     // If num_items_ == size, then this is an overwrite, not
@@ -38,11 +39,11 @@ class DataBuffer {
     return std::move(obj);
   }
 
-  bool Get(T* obj) {
+  std::optional<T> Get() {
     std::lock_guard<Mutex> lock(mutex_);
 
     if (num_items_ == 0) {
-      return false;
+      return {};
     }
 
     size_t offset = queue_end_ - num_items_;
@@ -51,10 +52,8 @@ class DataBuffer {
       offset = size - offset;
     }
 
-    *obj = std::move(data_[offset]);
-
     num_items_--;
-    return true;
+    return std::move(data_[offset]);
   }
 
  private:

@@ -106,13 +106,13 @@ class Cn105Packet {
     // Appends a byte to the Cn105Packet.
     void AppendByte(uint8_t byte);
 
-    // Returns true if the header has been read. After this,
-    // packet type and data length can be read.
-    bool IsHeaderComplete() const;
-
     // Returns true if the packet looks like junk. Specifically the start
     // marker is not kPacketStartMarker.
     bool IsJunk() const;
+
+    // Returns true if the header has been read. After this,
+    // packet type and data length can be read.
+    bool IsHeaderComplete() const;
 
     // Returns true if current packet is complete.
     bool IsComplete() const;

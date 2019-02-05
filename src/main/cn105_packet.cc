@@ -28,6 +28,7 @@ size_t Cn105Packet::NextChunkSize() const {
 
 bool Cn105Packet::IsComplete() const {
   if (IsJunk()) {
+    // TODO(awong): Why did you do this? Junk packets should always be complete, no?
     return bytes_read_ < bytes_.size();
   }
 

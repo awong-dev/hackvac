@@ -39,6 +39,7 @@
 
 #include "esp_cxx/event_manager.h"
 #include "esp_cxx/task.h"
+#include "esp_cxx/test.h"
 #include "esp_cxx/queue.h"
 
 #include "half_duplex_channel.h"
@@ -48,7 +49,7 @@ namespace hackvac {
 class Controller {
  public:
   explicit Controller(esp_cxx::QueueSetEventManager* event_manager);
-  ~Controller();
+  ESPCXX_MOCKABLE ~Controller();
 
   // Starts the message processing.
   void Start();
@@ -60,37 +61,33 @@ class Controller {
   void SetTemperature(HalfDegreeTemp temp);
 
  private:
+  friend class MockController;
+
+  enum class Command : uint8_t {
+    kConnect,
+    kQuerySettings,
+    kQueryExtendedSettings,
+    kPushSettings,
+    kPushExtendedSettings,
+  };
+
+  // Accessors that allow for unittest to dependency inject.
+  ESPCXX_MOCKABLE HalfDuplexChannel* hvac_control() { return &hvac_control_; }
+  ESPCXX_MOCKABLE HalfDuplexChannel* thermostat() { return &thermostat_; }
+
   // Runs on the |hvac_control_| channel's message pump task.
   void OnHvacControlPacket(std::unique_ptr<Cn105Packet> hvac_packet);
 
   // Runs on the |thermostat_| channel's message pump task.
   void OnThermostatPacket(std::unique_ptr<Cn105Packet> thermostat_packet);
 
-  // Task that sends updates to the HVAC control unit when settings change.
-  void ControlTaskRunLoop();
-
-  // Attempts connect sequence. Returns on a successful ack.
-  bool DoConnect();
-
-  // Queries/Pushes settings over the |hvac_control_| channel.
-  std::optional<HvacSettings> QuerySettings();
-  bool PushSettings(const StoredHvacSettings& settings);
-
-  // Queries/Pushes extended settings over the |hvac_control_| channel.
-  std::optional<ExtendedSettings> QueryExtendedSettings();
-  bool PushExtendedSettings(const StoredExtendedSettings& extended_settings);
+  // Adds a command to the queue and attempts to run it.
+  void ScheduleCommand(Command command);
 
   // Starts the next command in |command_queue_|. This the start of the logical
   // protocol actions and is invoked either on a timer, as a sideffect of a
   // public method call, or in response a packet or uart event.
   void ExecuteNextCommand();
-
-  // Reads and discards packets from |hvac_packet_rx_queue_| until a packet
-  // of |type| found.
-  //
-  // TODO(awong): What's the right timeout.
-  std::unique_ptr<Cn105Packet> AwaitPacketOfType(PacketType type,
-                                                 int timeout_ms = 20);
 
   // Generates an Ack for an info packet.
   std::unique_ptr<Cn105Packet> CreateInfoAck(InfoPacket info);
@@ -107,32 +104,14 @@ class Controller {
   // Channel talking to the thermosat.
   HalfDuplexChannel thermostat_;
 
-  enum class ChatterState {
-    kDisconnected,
-    kWaitingConnectAck,
-    kWaitingInfoAck,
-    kWaitingExtendedInfoAck,
-    kWaitingUpdateAck,
-    kWaitingExtendedUpdateAck,
-  };
-  ChatterState chatter_state_ = ChatterState::kDisconnected;
-
-  // Whether or not the hvac_control_ is connected.
-  bool is_connected_ = false;
-
-  enum class Command : uint8_t {
-    kConnect,
-    kQuerySettings,
-    kQueryExtendedSettings,
-    kPushSettings,
-    kPushExtendedSettings,
-  };
+  // Commands to run.
   std::deque<Command> command_queue_;
-  unsigned int command_number_ = 0;
-  bool is_command_oustanding_ = false;
 
-  // Queue of packets received from |hvac_control_|
-  esp_cxx::Queue<Cn105Packet*> hvac_packet_rx_queue_;
+  // The number of commands sent. Use for tracking timeouts.
+  unsigned int command_number_ = 0;
+
+  // Whether or not the current command has received an ack.
+  bool is_command_oustanding_ = false;
 
   // Asynchronous logger to track protocol interactions.
   esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacketThunk> packet_logger_{"packets"};

@@ -16,12 +16,14 @@ void EventManager::RunDelayed(std::function<void(void)> closure, int delay_ms) {
 
 void EventManager::RunAfter(std::function<void(void)> closure, TimePoint run_after) {
   std::lock_guard<Mutex> lock(lock_);
-  while (num_entries_ >= closures_.size()) {
+  if (num_entries_ >= closures_.size()) {
     // TODO(awong): Wait until there's space or drop? We need a cv.
+    return;
   }
 
+  int index = (head_ + num_entries_) % closures_.size();
+  closures_[index] = {std::move(closure), run_after};
   num_entries_++;
-  closures_[(head_ + num_entries_) % closures_.size()] = {std::move(closure), run_after};
 
   // Wake up the poll loop.
   Wake();
@@ -30,7 +32,7 @@ void EventManager::RunAfter(std::function<void(void)> closure, TimePoint run_aft
 void EventManager::Loop() {
    TimePoint next_wake = TimePoint::max();
 
-  for (;;) {
+  while (!has_quit_) {
     // Do the poll.
     auto timeout_ms = next_wake - std::chrono::steady_clock::now();
     auto raw_ms = std::chrono::duration_cast<std::chrono::milliseconds>(timeout_ms).count();
@@ -44,28 +46,36 @@ void EventManager::Loop() {
     // Run the closures.
     ClosureList to_run;
     int num_to_run = 0;
-    next_wake = GetReadyClosures(&closures_, &num_to_run, std::chrono::steady_clock::now());
+    next_wake = GetReadyClosures(&to_run, &num_to_run, std::chrono::steady_clock::now());
     for (size_t i = 0; i < num_to_run; i++) {
-      closures_[i].thunk();
+      to_run[i].thunk();
     }
   }
 }
 
-EventManager::TimePoint EventManager::GetReadyClosures(ClosureList* to_run, int* entries,
-                                   std::chrono::steady_clock::time_point now) {
+void EventManager::Quit() {
+  has_quit_ = true;
+}
+
+EventManager::TimePoint EventManager::GetReadyClosures(
+    ClosureList* to_run, int* entries,
+    std::chrono::steady_clock::time_point now) {
   TimePoint next_wake = TimePoint::max();
   *entries = 0;
   {
     std::lock_guard<Mutex> lock(lock_);
-    int last_inserted = 0;
+    int insert_index = head_;
     for (int i = 0; i < num_entries_; i++) {
-      if (closures_[i].run_after < now) {
-        (*to_run)[(*entries)++] = std::move(closures_[i]);
+      int index = (head_ + i) % closures_.size();
+      if (closures_[index].run_after < now) {
+        (*to_run)[(*entries)++] = std::move(closures_[index]);
       } else {
-        next_wake = std::min(closures_[i].run_after, next_wake);
-        closures_[last_inserted++] = std::move(closures_[i]);
+        next_wake = std::min(closures_[index].run_after, next_wake);
+        closures_[insert_index] = std::move(closures_[index]);
+        insert_index = (insert_index + 1) % closures_.size();
       }
     }
+    num_entries_ -= *entries;
   }
 
   // Sort the to_run list.
@@ -77,6 +87,10 @@ EventManager::TimePoint EventManager::GetReadyClosures(ClosureList* to_run, int*
 // Initialize to 1 more than max events to allow for the Wake() call.
 QueueSetEventManager::QueueSetEventManager(int max_waiting_events)
   : underlying_queue_set_(max_waiting_events + 1) {
+#ifndef FAKE_ESP_IDF
+#else
+  Add(&wake_queue_, []{});
+#endif
 }
 
 void QueueSetEventManager::Add(QueueBase* queue,
@@ -92,11 +106,19 @@ void QueueSetEventManager::Remove(QueueBase* queue) {
 
 void QueueSetEventManager::Poll(int timeout_ms) {
   QueueBase::Id id = underlying_queue_set_.Select(timeout_ms);
-  callbacks_[id]();
+  if (id != QueueBase::kInvalidId) {
+    auto it = callbacks_.find(id);
+    if (it != callbacks_.end()) {
+      it->second();
+    }
+  }
 }
 
 void QueueSetEventManager::Wake() {
-  // TODO(awong): There should be a semaphore that we can signal.
+#ifndef FAKE_ESP_IDF
+#else
+  wake_queue_.Push('w');
+#endif
 }
 
 }  // namespace esp_cxx

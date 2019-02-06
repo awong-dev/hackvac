@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <chrono>
 #include <numeric>
+#include <random>
 
 namespace {
 
@@ -57,6 +58,10 @@ bool QueueBase::RawPush(const void* obj, int timeout_ms) {
   memcpy(&buf[0], obj, element_size_);
   queue_.push(std::move(buf));
   on_push_.notify_one();
+
+  if (queueset_fd_ != QueueBase::kInvalidId) {
+    while(write(queueset_fd_, "", 1) == -EINTR);
+  }
 
   return true;
 #endif
@@ -111,7 +116,6 @@ QueueSet::QueueSet(int max_items)
 #else
 QueueSet::QueueSet(int max_items) {
   // max_items unused. Too hard to emulate.
-  FD_ZERO(&queue_fds_);
 }
 #endif
 
@@ -128,9 +132,8 @@ void QueueSet::Add(QueueBase* queue) {
   int fildes[2];
   int ret = pipe(&fildes[0]);
   assert(ret == 0);
-  queue->queueset_fd_ = fildes[0];
-  FD_SET(fildes[1], &queue_fds_);
-  pipe_pairs_[fildes[0]] = fildes[1];
+  queue->queueset_fd_ = fildes[1];
+  pipe_pairs_[fildes[1]] = fildes[0];
 #endif
 }
 
@@ -139,14 +142,13 @@ void QueueSet::Remove(QueueBase* queue) {
   xQueueRemoveFromSet(queue->queue_, queue_set_);
 #else
   int fd = queue->queueset_fd_;
-  queue->queueset_fd_ = -1;
+  queue->queueset_fd_ = QueueBase::kInvalidId;
 
   int ret = close(fd);
   assert(ret == 0);
 
   int fd2 = pipe_pairs_[fd];
-  FD_CLR(fd2, &queue_fds_);
-  pipe_pairs_.erase(fd2);
+  pipe_pairs_.erase(fd);
   ret = close(fd2);
   assert(ret == 0);
 #endif
@@ -162,10 +164,33 @@ QueueBase::Id QueueSet::Select(int timeout_ms) {
     (timeout_ms % 1000) * 1000,
   };
   int nfds = 0;
+  fd_set read_fds;
+  FD_ZERO(&read_fds);
   for (auto item : pipe_pairs_) {
     nfds = std::max(nfds, item.second);
+    FD_SET(item.second, &read_fds);
   }
-  return select(nfds, &queue_fds_, nullptr, nullptr, &tv);
+  nfds++; // select() requires 1 past max.
+  int num_ready = 0;
+  while ((num_ready = select(nfds, &read_fds, nullptr, nullptr, &tv)) == -EINTR);
+
+  if (num_ready > 0) {
+    int *fds = static_cast<int*>(alloca(num_ready * sizeof(int)));
+    int cur = 0;
+    for (auto item : pipe_pairs_) {
+      if (FD_ISSET(item.second, &read_fds)) {
+        fds[cur++] = item.second;
+      }
+    }
+
+    // Shuffle the ready file descriptors so a really busy FD cannot
+    // starve the others.
+    static std::random_device rd;
+    static std::mt19937 g(rd());
+    std::shuffle(fds, fds + num_ready, g);
+    return fds[0];
+  }
+  return QueueBase::kInvalidId;
 #endif
 }
 

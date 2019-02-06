@@ -8,6 +8,7 @@
 #include "esp_cxx/event_manager.h"
 #include "esp_cxx/gpio.h"
 #include "esp_cxx/task.h"
+#include "esp_cxx/test.h"
 #include "esp_cxx/queue.h"
 #include "esp_cxx/uart.h"
 
@@ -44,8 +45,6 @@ class HalfDuplexChannel {
  public:
   using PacketCallback = std::function<void(std::unique_ptr<Cn105Packet>)>;
 
-  // TODO(ajwong): Missing priority.
-  //
   // Creaes a half-duplex channel.
   // |name| is used for logging and naming the message pumping task.
   // |uart| is the hardware uart to use.
@@ -66,14 +65,14 @@ class HalfDuplexChannel {
                     PacketCallback after_send_cb = PacketCallback(),
                     esp_cxx::Gpio tx_debug_pin = {},
                     esp_cxx::Gpio rx_debug_pin = {});
-  ~HalfDuplexChannel();
+  ESPCXX_MOCKABLE ~HalfDuplexChannel();
 
   // Starts sending/receiving data from the UART. After this, |on_packet_cb_|
   // will begin to receive Cn105Packets.
-  void Start();
+  ESPCXX_MOCKABLE void Start();
 
   // Enqueues a packet for sending.
-  void EnqueuePacket(std::unique_ptr<Cn105Packet> packet);
+  ESPCXX_MOCKABLE void EnqueuePacket(std::unique_ptr<Cn105Packet> packet);
 
  private:
   using Clock = std::chrono::steady_clock;
@@ -139,7 +138,7 @@ class HalfDuplexChannel {
   esp_cxx::Gpio rx_debug_pin_{};
 
   // Queue that receives the data from the UART.
-  esp_cxx::Queue<esp_cxx::Uart::Event> rx_queue_;
+  esp_cxx::Queue<esp_cxx::Uart::Event> rx_queue_{esp_cxx::Queue<esp_cxx::Uart::Event>::CreateNullQueue()};
 
   // Current packet being received.
   std::unique_ptr<Cn105Packet> current_rx_packet_;

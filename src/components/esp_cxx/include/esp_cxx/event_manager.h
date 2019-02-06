@@ -28,8 +28,11 @@ class EventManager {
   // points. Don't do that.
   void RunAfter(std::function<void(void)> closure, TimePoint run_after);
 
-  // Waits for next I/O event or task before waking up.
+  // Continually polls for next I/O event or task.
   void Loop();
+
+  // Make Loop() above return.
+  void Quit();
 
  protected:
   EventManager() = default;
@@ -57,6 +60,7 @@ class EventManager {
   ClosureList closures_;
   int num_entries_ = 0;
   int head_ = 0;
+  bool has_quit_ = false;
 };
 
 class QueueSetEventManager : public EventManager {
@@ -84,6 +88,12 @@ class QueueSetEventManager : public EventManager {
   // is probably just fine.
   std::unordered_map<QueueBase::Id, std::function<void(void)>> callbacks_;
   QueueSet underlying_queue_set_;
+
+#ifndef FAKE_ESP_IDF
+#error Write semaphore code here.
+#else
+  esp_cxx::Queue<char> wake_queue_{1};
+#endif
 };
 
 }  // namespace esp_cxx

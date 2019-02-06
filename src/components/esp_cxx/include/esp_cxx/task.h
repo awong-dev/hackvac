@@ -1,5 +1,5 @@
-#ifndef TASK_H_
-#define TASK_H_
+#ifndef ESPCXX_TASK_H_
+#define ESPCXX_TASK_H_
 
 #include <utility>
 
@@ -130,4 +130,4 @@ class Task : public TaskRef {
 
 }  // namespace esp_cxx
 
-#endif  // TASK_H_
+#endif  // ESPCXX_TASK_H_

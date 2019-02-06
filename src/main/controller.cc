@@ -78,18 +78,16 @@ Controller::Controller(esp_cxx::QueueSetEventManager* event_manager)
                   packet_logger_.Log(std::move(packet));
                 },
                 esp_cxx::Gpio::Pin<23>(),
-                esp_cxx::Gpio::Pin<22>()),
-    hvac_packet_rx_queue_(10) {  // TODO(awong): Pull out constant.
+                esp_cxx::Gpio::Pin<22>()) {
 }
 
 Controller::~Controller() {
 }
 
 void Controller::Start() {
-  hvac_control_.Start();
-  thermostat_.Start();
-  command_queue_.push_back(Command::kConnect);
-  ExecuteNextCommand();
+  hvac_control()->Start();
+  thermostat()->Start();
+  ScheduleCommand(Command::kConnect);
 }
 
 void Controller::SetTemperature(HalfDegreeTemp temp) {
@@ -97,18 +95,19 @@ void Controller::SetTemperature(HalfDegreeTemp temp) {
   new_settings.SetTargetTemp(temp);
   shared_data_.SetStoredHvacSettings(new_settings);
 
-  event_manager_->Run(
-      [this]{
-        command_queue_.push_back(Command::kPushSettings);
-        ExecuteNextCommand();
-      });
+  event_manager_->Run([this]{ ScheduleCommand(Command::kPushSettings); });
+}
+
+void Controller::ScheduleCommand(Command command) {
+  command_queue_.push_front(command);
+  ExecuteNextCommand();
 }
 
 void Controller::ExecuteNextCommand() {
   // A new command can cause this loop to enter before the current command
   // is complete. In this case, just return as command completion will
   // cause this function to execute again.
-  if (!is_command_oustanding_) {
+  if (is_command_oustanding_) {
     return;
   }
 
@@ -120,23 +119,23 @@ void Controller::ExecuteNextCommand() {
 
   switch (command) {
     case Command::kConnect:
-      hvac_control_.EnqueuePacket(ConnectPacket::Create());
+      hvac_control()->EnqueuePacket(ConnectPacket::Create());
       break;
 
     case Command::kQuerySettings:
-      hvac_control_.EnqueuePacket(InfoPacket::Create(CommandType::kSettings));
+      hvac_control()->EnqueuePacket(InfoPacket::Create(CommandType::kSettings));
       break;
 
     case Command::kQueryExtendedSettings:
-      hvac_control_.EnqueuePacket(InfoPacket::Create(CommandType::kExtendedSettings));
+      hvac_control()->EnqueuePacket(InfoPacket::Create(CommandType::kExtendedSettings));
       break;
 
     case Command::kPushSettings:
-      hvac_control_.EnqueuePacket(UpdatePacket::Create(shared_data_.GetStoredHvacSettings()));
+      hvac_control()->EnqueuePacket(UpdatePacket::Create(shared_data_.GetStoredHvacSettings()));
       break;
 
     case Command::kPushExtendedSettings:
-      hvac_control_.EnqueuePacket(UpdatePacket::Create(shared_data_.GetExtendedSettings()));
+      hvac_control()->EnqueuePacket(UpdatePacket::Create(shared_data_.GetExtendedSettings()));
       break;
   }
 
@@ -147,8 +146,7 @@ void Controller::ExecuteNextCommand() {
       [this, prev_command_number = command_number_] {
         if (prev_command_number == command_number_ &&
             !is_command_oustanding_) {
-          command_queue_.push_front(Command::kConnect);
-          ExecuteNextCommand();
+          ScheduleCommand(Command::kConnect);
         }
       }, kProtocolTimeoutMs);
 }
@@ -158,7 +156,7 @@ void Controller::OnHvacControlPacket(
   if (is_passthru_) {
     ESP_LOGI(kTag, "hvac_ctl: %d bytes", hvac_packet->packet_size());
     ESP_LOG_BUFFER_HEX_LEVEL(kTag, hvac_packet->raw_bytes(), hvac_packet->packet_size(), ESP_LOG_INFO); 
-    thermostat_.EnqueuePacket(std::move(hvac_packet));
+    thermostat()->EnqueuePacket(std::move(hvac_packet));
     return;
   }
 
@@ -169,8 +167,7 @@ void Controller::OnHvacControlPacket(
 
   if (!hvac_packet->IsComplete()) {
     // An incomplete packet means something timed out. Reconnect.
-    command_queue_.push_front(Command::kConnect);
-    ExecuteNextCommand();
+    ScheduleCommand(Command::kConnect);
     return;
   }
 
@@ -216,7 +213,7 @@ void Controller::OnHvacControlPacket(
 void Controller::OnThermostatPacket(
     std::unique_ptr<Cn105Packet> thermostat_packet) {
   if (is_passthru_) {
-    hvac_control_.EnqueuePacket(std::move(thermostat_packet));
+    hvac_control()->EnqueuePacket(std::move(thermostat_packet));
   } else {
     if (!thermostat_packet->IsJunk() &&
         thermostat_packet->IsComplete() &&
@@ -225,7 +222,7 @@ void Controller::OnThermostatPacket(
       switch (thermostat_packet->type()) {
         case PacketType::kConnect:
           ESP_LOGI(kTag, "Sending ConnectACK");
-          thermostat_.EnqueuePacket(ConnectAckPacket::Create());
+          thermostat()->EnqueuePacket(ConnectAckPacket::Create());
           break;
 
         case PacketType::kExtendedConnect:
@@ -233,7 +230,7 @@ void Controller::OnThermostatPacket(
           // TODO(awong): See if there's a way to understand this packet.
           // Ignoring it for now seems to cause Pac444CN-1 to send 2 attempts
           // and then give up and move on.
-          thermostat_.EnqueuePacket(ExtendedConnectAckPacket::Create());
+          thermostat()->EnqueuePacket(ExtendedConnectAckPacket::Create());
           break;
 
         case PacketType::kUpdate:
@@ -244,13 +241,13 @@ void Controller::OnThermostatPacket(
             new_settings.MergeUpdate(update.settings());
             shared_data_.SetStoredHvacSettings(new_settings);
             ESP_LOGI(kTag, "Sending UpdateACK");
-            thermostat_.EnqueuePacket(UpdateAckPacket::Create());
+            thermostat()->EnqueuePacket(UpdateAckPacket::Create());
             break;
           }
 
         case PacketType::kInfo:
           ESP_LOGI(kTag, "Sending InfoACK");
-          thermostat_.EnqueuePacket(
+          thermostat()->EnqueuePacket(
               CreateInfoAck(InfoPacket(thermostat_packet.get())));
           break;
 

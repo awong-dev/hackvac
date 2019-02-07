@@ -212,6 +212,8 @@ void Controller::OnHvacControlPacket(
 
 void Controller::OnThermostatPacket(
     std::unique_ptr<Cn105Packet> thermostat_packet) {
+  ESP_LOGI(kTag, "Got %x %d", static_cast<int>(thermostat_packet->type()),
+           thermostat_packet->IsChecksumValid());
   if (is_passthru_) {
     hvac_control()->EnqueuePacket(std::move(thermostat_packet));
   } else {

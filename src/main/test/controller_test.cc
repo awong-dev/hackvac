@@ -5,8 +5,11 @@
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 
-using testing::_;
+using testing::AllOf;
+using testing::Mock;
 using testing::NotNull;
+using testing::Property;
+using testing::_;
 
 namespace hackvac {
 class MockHalfDuplexChannel : public HalfDuplexChannel {
@@ -28,6 +31,8 @@ class FakeController : public Controller {
 
   MockHalfDuplexChannel mock_hvac_control;
   MockHalfDuplexChannel mock_thermostat;
+
+  using Controller::OnThermostatPacket;
 };
 
 class ControllerTest : public ::testing::Test {
@@ -37,16 +42,45 @@ class ControllerTest : public ::testing::Test {
 };
 
 // * Sends connect packet.
-// * Responds to tstat
 TEST_F(ControllerTest, Start) {
-  EXPECT_CALL(controller_.mock_hvac_control, Start()).Times(1);
-  EXPECT_CALL(controller_.mock_thermostat, Start()).Times(1);
-  EXPECT_CALL(controller_.mock_hvac_control, EnqueuePacket(NotNull())).Times(1);
+  EXPECT_CALL(controller_.mock_hvac_control, Start());
+  EXPECT_CALL(controller_.mock_thermostat, Start());
+  EXPECT_CALL(controller_.mock_hvac_control, EnqueuePacket(NotNull()));
 
   controller_.Start();
 
   event_manager_.Run([=]{event_manager_.Quit();});
   event_manager_.Loop();
+}
+
+// * Ignores junk/incomplete/invalid packets.
+// * Acks a connect.
+// * Acks an extended connect.
+// * Acks an info request.
+// * Merges an update.
+TEST_F(ControllerTest, OnThermostatPacket) {
+  EXPECT_CALL(controller_.mock_thermostat,
+              EnqueuePacket(
+                  Pointee(Property(&Cn105Packet::type, PacketType::kConnectAck)))
+             );
+  controller_.OnThermostatPacket(ConnectPacket::Create());
+  Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
+
+  EXPECT_CALL(controller_.mock_thermostat,
+              EnqueuePacket(
+                  Pointee(Property(&Cn105Packet::type, PacketType::kExtendedConnectAck)))
+             );
+  controller_.OnThermostatPacket(ExtendedConnectPacket::Create());
+  Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
+
+  // TODO(awong): The checksum is the problem. Ugh.
+  EXPECT_CALL(controller_.mock_thermostat,
+              EnqueuePacket(
+                  Pointee(Property(&Cn105Packet::type, PacketType::kUpdateAck)))
+             );
+  StoredHvacSettings settings;
+  controller_.OnThermostatPacket(UpdatePacket::Create(settings));
+  Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 }
 
 // * Packets sent to one interace show up in the other, regardless of type.

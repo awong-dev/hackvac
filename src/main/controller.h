@@ -10,6 +10,8 @@
 #include "esp_cxx/mutex.h"
 #include "esp_cxx/data_logger.h"
 
+#include "gtest/gtest_prod.h"
+
 // This class is designed to control a Mitsubishi CN105 serial control
 // interface. It can either MiTM a signal to log/modify commands, or it
 // can just take over and send its own commands.
@@ -61,7 +63,7 @@ class Controller {
   void SetTemperature(HalfDegreeTemp temp);
 
  private:
-  friend class MockController;
+  friend class FakeController;
 
   enum class Command : uint8_t {
     kConnect,

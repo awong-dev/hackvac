@@ -42,6 +42,14 @@ class ConnectAckPacket {
   }
 };
 
+class ExtendedConnectPacket {
+ public:
+  static std::unique_ptr<Cn105Packet> Create() {
+    static constexpr std::array<uint8_t, 1> data = { 0xc9 };
+    return std::make_unique<Cn105Packet>(PacketType::kExtendedConnect, data);
+  }
+};
+
 class ExtendedConnectAckPacket {
  public:
   static std::unique_ptr<Cn105Packet> Create() {

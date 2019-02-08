@@ -72,14 +72,16 @@ class UpdatePacket {
   explicit UpdatePacket(Cn105Packet* packet) : packet_(packet) {}
 
   static std::unique_ptr<Cn105Packet> Create(const StoredHvacSettings& settings) {
-    auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdate, settings.encoded_bytes());
-    packet->data()[0] = static_cast<uint8_t>(CommandType::kSetSettings);
+    auto data = settings.encoded_bytes();
+    data[0] = static_cast<uint8_t>(CommandType::kSetSettings);
+    auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdate, data);
     return packet;
   };
 
   static std::unique_ptr<Cn105Packet> Create(const StoredExtendedSettings& extended_settings) {
-    auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdate, extended_settings.encoded_bytes());
-    packet->data()[0] = static_cast<uint8_t>(CommandType::kSetExtendedSettings);
+    auto data = extended_settings.encoded_bytes();
+    data[0] = static_cast<uint8_t>(CommandType::kSetExtendedSettings);
+    auto packet = std::make_unique<Cn105Packet>(PacketType::kUpdate, data);
     return packet;
   };
 
@@ -117,8 +119,9 @@ class InfoPacket {
 
   static std::unique_ptr<Cn105Packet> Create(CommandType type) {
     // TODO(awong): constructor for initializing X blank bytes.
-    auto packet = std::make_unique<Cn105Packet>(PacketType::kInfo, kBlank16BytePacket);
-    packet->data()[0] = static_cast<uint8_t>(type);
+    auto data = kBlank16BytePacket;
+    data[0] = static_cast<uint8_t>(type);
+    auto packet = std::make_unique<Cn105Packet>(PacketType::kInfo, data);
     return packet;
   }
 

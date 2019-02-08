@@ -31,6 +31,7 @@ void Controller::SharedData::SetStoredHvacSettings(const HvacSettings& hvac_sett
     std::lock_guard<esp_cxx::Mutex> lock_(mutex_);
     hvac_settings_ = hvac_settings;
   }
+  /* Crashes due to optional.
   ESP_LOGI(kTag, "settings: p:%d m:%d, t:%d, f:%d, v:%d, wv:%d",
            static_cast<int32_t>(hvac_settings.Get<Power>().value()),
            static_cast<int32_t>(hvac_settings.Get<Mode>().value()),
@@ -38,6 +39,7 @@ void Controller::SharedData::SetStoredHvacSettings(const HvacSettings& hvac_sett
            static_cast<int32_t>(hvac_settings.Get<Fan>().value()),
            static_cast<int32_t>(hvac_settings.Get<Vane>().value()),
            static_cast<int32_t>(hvac_settings.Get<WideVane>().value()));
+           */
 }
 
 StoredExtendedSettings Controller::SharedData::GetExtendedSettings() const {
@@ -212,8 +214,6 @@ void Controller::OnHvacControlPacket(
 
 void Controller::OnThermostatPacket(
     std::unique_ptr<Cn105Packet> thermostat_packet) {
-  ESP_LOGI(kTag, "Got %x %d", static_cast<int>(thermostat_packet->type()),
-           thermostat_packet->IsChecksumValid());
   if (is_passthru_) {
     hvac_control()->EnqueuePacket(std::move(thermostat_packet));
   } else {

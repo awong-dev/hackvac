@@ -73,13 +73,45 @@ TEST_F(ControllerTest, OnThermostatPacket) {
   controller_.OnThermostatPacket(ExtendedConnectPacket::Create());
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 
-  // TODO(awong): The checksum is the problem. Ugh.
   EXPECT_CALL(controller_.mock_thermostat,
               EnqueuePacket(
                   Pointee(Property(&Cn105Packet::type, PacketType::kUpdateAck)))
              );
   StoredHvacSettings settings;
   controller_.OnThermostatPacket(UpdatePacket::Create(settings));
+  // TODO(awong): Verify the settings make it into the controller.
+  Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
+
+  EXPECT_CALL(controller_.mock_thermostat,
+              EnqueuePacket(
+                  Pointee(Property(&Cn105Packet::type, PacketType::kInfoAck)))
+             );
+  // TODO(awong): Verify the Acked data.
+  controller_.OnThermostatPacket(InfoPacket::Create(CommandType::kSettings));
+  Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
+
+  EXPECT_CALL(controller_.mock_thermostat,
+              EnqueuePacket(
+                  Pointee(Property(&Cn105Packet::type, PacketType::kInfoAck)))
+             );
+  // TODO(awong): Verify the Acked data.
+  controller_.OnThermostatPacket(InfoPacket::Create(CommandType::kExtendedSettings));
+  Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
+
+  EXPECT_CALL(controller_.mock_thermostat,
+              EnqueuePacket(
+                  Pointee(Property(&Cn105Packet::type, PacketType::kInfoAck)))
+             );
+  // TODO(awong): Verify the Acked data.
+  controller_.OnThermostatPacket(InfoPacket::Create(CommandType::kTimers));
+  Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
+
+  EXPECT_CALL(controller_.mock_thermostat,
+              EnqueuePacket(
+                  Pointee(Property(&Cn105Packet::type, PacketType::kInfoAck)))
+             );
+  // TODO(awong): Verify the Acked data.
+  controller_.OnThermostatPacket(InfoPacket::Create(CommandType::kStatus));
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 }
 

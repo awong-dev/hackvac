@@ -6,6 +6,7 @@
 #include "gmock/gmock.h"
 
 using testing::AllOf;
+using testing::Eq;
 using testing::Mock;
 using testing::NotNull;
 using testing::Property;
@@ -73,11 +74,21 @@ TEST_F(ControllerTest, OnThermostatPacket) {
   controller_.OnThermostatPacket(ExtendedConnectPacket::Create());
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 
+  StoredHvacSettings settings;
+  settings.Set(Power::kOn);
+  settings.Set(Mode::kDry);
+  settings.Set(Fan::kPower2);
+  settings.Set(Vane::kPower4);
+  settings.Set(WideVane::kLeftAndRight);
   EXPECT_CALL(controller_.mock_thermostat,
               EnqueuePacket(
-                  Pointee(Property(&Cn105Packet::type, PacketType::kUpdateAck)))
+                  Pointee(
+                      AllOf(Property(&Cn105Packet::type, PacketType::kUpdateAck)
+                            , Property(&Cn105Packet::data_str, ::testing::ElementsAreArray(settings.encoded_bytes()))
+                           )
+                      )
+                  )
              );
-  StoredHvacSettings settings;
   controller_.OnThermostatPacket(UpdatePacket::Create(settings));
   // TODO(awong): Verify the settings make it into the controller.
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);

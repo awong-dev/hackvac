@@ -247,12 +247,18 @@ class HvacSettings {
   void Set(std::optional<T> setting) const {
     constexpr SettingsBitfield field = ExtractConfig<T>::kBitfield;
     if (setting) {
-      Bitfield<field>::Set(data_ptr_);
-      data_ptr_[ExtractConfig<T>::kDataPos] = static_cast<uint8_t>(setting);
+      Set(setting.value());
     } else {
       Bitfield<field>::Unset(data_ptr_);
       data_ptr_[ExtractConfig<T>::kDataPos] = 0x00;
     }
+  }
+
+  template <typename T>
+  void Set(T setting) const {
+    constexpr SettingsBitfield field = ExtractConfig<T>::kBitfield;
+    Bitfield<field>::Set(data_ptr_);
+    data_ptr_[ExtractConfig<T>::kDataPos] = static_cast<uint8_t>(setting);
   }
 
   std::optional<HalfDegreeTemp> GetTargetTemp() const;

@@ -131,6 +131,8 @@ class Cn105Packet {
     // Header accessors. Returns valid data when IsHeaderComplete() is true.
     PacketType type() const { return static_cast<PacketType>(bytes_[kTypePos]); }
     uint8_t* data() { return &bytes_[kDataStartPos]; }
+    std::string_view data_str() const { return {reinterpret_cast<const char*>(&bytes_[kDataStartPos]), data_size()}; }
+    const uint8_t* data() const { return &bytes_[kDataStartPos]; }
     size_t data_size() const { return bytes_[kDataLenPos]; }
 
     size_t packet_size() const { return kHeaderLength + data_size() + kChecksumSize; }

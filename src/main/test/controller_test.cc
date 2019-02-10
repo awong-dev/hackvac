@@ -6,6 +6,7 @@
 #include "gmock/gmock.h"
 
 using testing::AllOf;
+using testing::ElementsAreArray;
 using testing::Eq;
 using testing::Mock;
 using testing::NotNull;
@@ -33,7 +34,9 @@ class FakeController : public Controller {
   MockHalfDuplexChannel mock_hvac_control;
   MockHalfDuplexChannel mock_thermostat;
 
+  // Expose for use in testing.
   using Controller::OnThermostatPacket;
+  using Controller::OnHvacControlPacket;
 };
 
 class ControllerTest : public ::testing::Test {
@@ -148,6 +151,24 @@ TEST_F(ControllerTest, OnThermostatPacket) {
 
 // * Packets sent to one interace show up in the other, regardless of type.
 TEST_F(ControllerTest, PassThru) {
+  controller_.set_passthru(true);
+  std::array<uint8_t, 2> junk1 = {0x01, 0x02};
+  std::array<uint8_t, 2> junk2 = {0x03, 0x04};
+
+  EXPECT_CALL(controller_.mock_thermostat,
+              EnqueuePacket(Pointee(Property(&Cn105Packet::raw_bytes_str, ElementsAreArray(junk1)))));
+  EXPECT_CALL(controller_.mock_hvac_control,
+              EnqueuePacket(Pointee(Property(&Cn105Packet::raw_bytes_str, ElementsAreArray(junk2)))));
+
+  std::unique_ptr<Cn105Packet> junk_packet = std::make_unique<Cn105Packet>();
+  junk_packet->AppendByte(junk1[0]);
+  junk_packet->AppendByte(junk1[1]);
+  controller_.OnHvacControlPacket(std::move(junk_packet));
+
+  junk_packet = std::make_unique<Cn105Packet>();
+  junk_packet->AppendByte(junk2[0]);
+  junk_packet->AppendByte(junk2[1]);
+  controller_.OnThermostatPacket(std::move(junk_packet));
 }
 
 // * Logs all packets from both interfaces, including junk, incomplete, invalid

@@ -131,13 +131,14 @@ class Cn105Packet {
     // Header accessors. Returns valid data when IsHeaderComplete() is true.
     PacketType type() const { return static_cast<PacketType>(bytes_[kTypePos]); }
     uint8_t* data() { return &bytes_[kDataStartPos]; }
-    std::string_view data_str() const { return {reinterpret_cast<const char*>(&bytes_[kDataStartPos]), data_size()}; }
     const uint8_t* data() const { return &bytes_[kDataStartPos]; }
     size_t data_size() const { return bytes_[kDataLenPos]; }
+    std::string_view data_str() const { return {reinterpret_cast<const char*>(&bytes_[kDataStartPos]), data_size()}; }
 
     size_t packet_size() const { return kHeaderLength + data_size() + kChecksumSize; }
     const uint8_t* raw_bytes() const { return bytes_.data(); }
     size_t raw_bytes_size() const { return bytes_read_; }
+    std::string_view raw_bytes_str() const { return {reinterpret_cast<const char*>(raw_bytes()), raw_bytes_size()}; }
 
     // Known value constants.
     static constexpr uint8_t kPacketStartMarker = 0xfc;

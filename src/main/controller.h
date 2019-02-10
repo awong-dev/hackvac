@@ -66,6 +66,10 @@ class Controller {
     return shared_data_.GetStoredHvacSettings();
   }
 
+  StoredExtendedSettings GetExtendedSettings() const {
+    return shared_data_.GetExtendedSettings();
+  }
+
  private:
   friend class FakeController;
 

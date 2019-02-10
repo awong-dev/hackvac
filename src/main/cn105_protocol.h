@@ -85,7 +85,9 @@ class UpdatePacket {
     return packet;
   };
 
+  // TODO(awong): These need to be optionals I think.
   HvacSettings settings() { return HvacSettings(packet_->data()); }
+  ExtendedSettings extended_settings() { return ExtendedSettings(packet_->data()); }
 
  private:
   // Not owned.
@@ -136,9 +138,15 @@ class InfoAckPacket {
   explicit InfoAckPacket(Cn105Packet* packet) : packet_(packet) {}
 
   static std::unique_ptr<Cn105Packet> Create(const StoredHvacSettings& settings) {
-    auto packet = std::make_unique<Cn105Packet>(PacketType::kInfoAck, settings.encoded_bytes());
-    packet->data()[0] = static_cast<uint8_t>(CommandType::kSettings);
-    return packet;
+    auto data = settings.encoded_bytes();
+    data[0] = static_cast<uint8_t>(CommandType::kSettings);
+    return std::make_unique<Cn105Packet>(PacketType::kInfoAck, settings.encoded_bytes());
+  }
+
+  static std::unique_ptr<Cn105Packet> Create(const StoredExtendedSettings& extended_settings) {
+    auto data = extended_settings.encoded_bytes();
+    data[0] = static_cast<uint8_t>(CommandType::kExtendedSettings);
+    return std::make_unique<Cn105Packet>(PacketType::kInfoAck, data);
   }
 
   CommandType type() const { return static_cast<CommandType>(packet_->data()[0]); }

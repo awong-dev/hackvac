@@ -239,9 +239,15 @@ void Controller::OnThermostatPacket(
           {
             // TODO(awong): Extract into a process function like CreateInfoAck().
             UpdatePacket update(thermostat_packet.get());
-            StoredHvacSettings new_settings = shared_data_.GetStoredHvacSettings();
-            new_settings.MergeUpdate(update.settings());
-            shared_data_.SetStoredHvacSettings(new_settings);
+
+            shared_data_.SetStoredHvacSettings(
+                shared_data_.GetStoredHvacSettings().MergeUpdate(
+                    update.settings()));
+
+            shared_data_.SetExtendedSettings(
+                shared_data_.GetExtendedSettings().MergeUpdate(
+                    update.extended_settings()));
+
             ESP_LOGI(kTag, "Sending UpdateACK");
             thermostat()->EnqueuePacket(UpdateAckPacket::Create());
             break;
@@ -267,8 +273,10 @@ std::unique_ptr<Cn105Packet> Controller::CreateInfoAck(InfoPacket info) {
     case CommandType::kSettings:
       return InfoAckPacket::Create(shared_data_.GetStoredHvacSettings());
 
-      // TODO(awong): Implement.
     case CommandType::kExtendedSettings:
+      return InfoAckPacket::Create(shared_data_.GetExtendedSettings());
+
+      // TODO(awong): Implement.
     case CommandType::kTimers:
     case CommandType::kStatus:
     case CommandType::kEnterStandby:

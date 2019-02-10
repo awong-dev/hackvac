@@ -125,8 +125,8 @@ enum class CommandType : uint8_t {
 // Represents temperatures in celcius in 0.5 degree increments. 
 class HalfDegreeTemp {
  public:
-  HalfDegreeTemp(int temp, bool plus_half)
-    : encoded_temp_(temp * 10 + (plus_half ? 5 : 0)) {
+  constexpr HalfDegreeTemp(int temp, bool plus_half)
+    : encoded_temp_(temp * 2 + (plus_half ? 1 : 0)) {
   }
 
   bool operator< (const HalfDegreeTemp& rhs) const {
@@ -143,6 +143,8 @@ class HalfDegreeTemp {
 
   bool is_half_degree() const { return encoded_temp_ % 2 != 0; }
   int whole_degree() const { return encoded_temp_ / 2; }
+
+  bool operator==(const HalfDegreeTemp& rhs) const { return rhs.encoded_temp_ == encoded_temp_; }
 
  private:
   explicit HalfDegreeTemp(uint8_t encoded_temp) : encoded_temp_(encoded_temp & 0x7F) {
@@ -266,6 +268,15 @@ class HvacSettings {
 
   const uint8_t* data_pointer() const { return data_ptr_; }
 
+  HvacSettings& MergeUpdate(const HvacSettings& update) {
+    if (auto new_value = update.Get<Power>()) Set(new_value.value());
+    if (auto new_value = update.Get<Mode>()) Set(new_value.value());
+    if (auto new_value = update.Get<Fan>()) Set(new_value.value());
+    if (auto new_value = update.Get<Vane>()) Set(new_value.value());
+    if (auto new_value = update.Get<WideVane>()) Set(new_value.value());
+    return *this;
+  }
+    
  protected:
   void set_data_pointer(uint8_t* ptr) { data_ptr_ = ptr; }
 
@@ -291,14 +302,6 @@ class StoredHvacSettings : public HvacSettings {
     return *this;
   }
 
-  void MergeUpdate(const HvacSettings& settings_update) {
-    if (auto new_value = settings_update.Get<Power>()) Set(new_value.value());
-    if (auto new_value = settings_update.Get<Mode>()) Set(new_value.value());
-    if (auto new_value = settings_update.Get<Fan>()) Set(new_value.value());
-    if (auto new_value = settings_update.Get<Vane>()) Set(new_value.value());
-    if (auto new_value = settings_update.Get<WideVane>()) Set(new_value.value());
-  }
-    
   // Returns the raw wireformat data bytes for an update packet. The
   // array is only valid until the next mutation of this object. Best
   // to copy th e values out immediately.
@@ -322,9 +325,15 @@ class ExtendedSettings {
   explicit ExtendedSettings(uint8_t* raw_data) : data_ptr_(raw_data) {}
 
   std::optional<HalfDegreeTemp> GetRoomTemp() const;
+  void SetRoomTemp(HalfDegreeTemp temp);
 
   const uint8_t* data_pointer() const { return data_ptr_; }
 
+  ExtendedSettings& MergeUpdate(const ExtendedSettings& updae) {
+    if (auto new_value = updae.GetRoomTemp()) SetRoomTemp(new_value.value());
+    return *this;
+  }
+    
  protected:
   void set_data_pointer(uint8_t* ptr) { data_ptr_ = ptr; }
 

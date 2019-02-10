@@ -56,4 +56,10 @@ std::optional<HalfDegreeTemp> ExtendedSettings::GetRoomTemp() const {
   }
 }
 
+void ExtendedSettings::SetRoomTemp(HalfDegreeTemp temp) {
+  data_ptr_[0] |= static_cast<uint8_t>(internal::ExtendedSettingsBitfield::kRoomTempFlag);
+  data_ptr_[6] = temp.encoded_temp();
+  data_ptr_[3] = temp.whole_degree() - kMinRoomTemp.whole_degree();
+}
+
 }  // namespace hackvac

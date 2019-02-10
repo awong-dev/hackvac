@@ -87,25 +87,45 @@ TEST_F(ControllerTest, OnThermostatPacket) {
   EXPECT_EQ(orig_settings.Get<Power>(), Power::kOn);
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 
-  std::unique_ptr<Cn105Packet> packet = InfoAckPacket::Create(controller_.GetSettings());
+  std::unique_ptr<Cn105Packet> settings_ack = InfoAckPacket::Create(controller_.GetSettings());
   EXPECT_CALL(controller_.mock_thermostat,
               EnqueuePacket(
                   Pointee(
-                      AllOf(Property(&Cn105Packet::type, PacketType::kInfoAck)
-                            , Property(&Cn105Packet::data_str, packet->data_str())
+                      AllOf(Property(&Cn105Packet::type, PacketType::kInfoAck),
+                            Property(&Cn105Packet::data_str, settings_ack->data_str())
                            )
                       )
                   )
              );
-  // TODO(awong): Verify the Acked data.
   controller_.OnThermostatPacket(InfoPacket::Create(CommandType::kSettings));
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 
+  StoredExtendedSettings extended_settings;
+  static constexpr HalfDegreeTemp kTestRoomTemp(20, true);
+  extended_settings.SetRoomTemp(kTestRoomTemp);
   EXPECT_CALL(controller_.mock_thermostat,
               EnqueuePacket(
-                  Pointee(Property(&Cn105Packet::type, PacketType::kInfoAck)))
+                  Pointee(Property(&Cn105Packet::type, PacketType::kUpdateAck)))
              );
-  // TODO(awong): Verify the Acked data.
+  StoredExtendedSettings orig_extended_settings = controller_.GetExtendedSettings();
+  controller_.OnThermostatPacket(UpdatePacket::Create(extended_settings));
+  StoredExtendedSettings new_extended_settings = controller_.GetExtendedSettings();
+  EXPECT_NE(orig_extended_settings.encoded_bytes(),
+            new_extended_settings.encoded_bytes());
+  EXPECT_EQ(new_extended_settings.GetRoomTemp().value(), kTestRoomTemp);
+  Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
+
+  std::unique_ptr<Cn105Packet> extended_settings_ack =
+      InfoAckPacket::Create(controller_.GetExtendedSettings());
+  EXPECT_CALL(controller_.mock_thermostat,
+              EnqueuePacket(
+                  Pointee(
+                      AllOf(Property(&Cn105Packet::type, PacketType::kInfoAck),
+                            Property(&Cn105Packet::data_str, extended_settings_ack->data_str())
+                           )
+                      )
+                  )
+             );
   controller_.OnThermostatPacket(InfoPacket::Create(CommandType::kExtendedSettings));
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 

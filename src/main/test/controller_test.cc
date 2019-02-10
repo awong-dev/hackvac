@@ -76,26 +76,26 @@ TEST_F(ControllerTest, OnThermostatPacket) {
 
   StoredHvacSettings settings;
   settings.Set(Power::kOn);
-  settings.Set(Mode::kDry);
-  settings.Set(Fan::kPower2);
-  settings.Set(Vane::kPower4);
-  settings.Set(WideVane::kLeftAndRight);
+  EXPECT_CALL(controller_.mock_thermostat,
+              EnqueuePacket(
+                  Pointee(Property(&Cn105Packet::type, PacketType::kUpdateAck)))
+             );
+  StoredHvacSettings orig_settings = controller_.GetSettings();
+  controller_.OnThermostatPacket(UpdatePacket::Create(settings));
+  StoredHvacSettings new_settings = controller_.GetSettings();
+  EXPECT_NE(orig_settings.encoded_bytes(), new_settings.encoded_bytes());
+  EXPECT_EQ(orig_settings.Get<Power>(), Power::kOn);
+  Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
+
+  std::unique_ptr<Cn105Packet> packet = InfoAckPacket::Create(controller_.GetSettings());
   EXPECT_CALL(controller_.mock_thermostat,
               EnqueuePacket(
                   Pointee(
-                      AllOf(Property(&Cn105Packet::type, PacketType::kUpdateAck)
-                            , Property(&Cn105Packet::data_str, ::testing::ElementsAreArray(settings.encoded_bytes()))
+                      AllOf(Property(&Cn105Packet::type, PacketType::kInfoAck)
+                            , Property(&Cn105Packet::data_str, packet->data_str())
                            )
                       )
                   )
-             );
-  controller_.OnThermostatPacket(UpdatePacket::Create(settings));
-  // TODO(awong): Verify the settings make it into the controller.
-  Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
-
-  EXPECT_CALL(controller_.mock_thermostat,
-              EnqueuePacket(
-                  Pointee(Property(&Cn105Packet::type, PacketType::kInfoAck)))
              );
   // TODO(awong): Verify the Acked data.
   controller_.OnThermostatPacket(InfoPacket::Create(CommandType::kSettings));

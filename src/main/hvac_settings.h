@@ -292,7 +292,11 @@ class StoredHvacSettings : public HvacSettings {
   }
 
   void MergeUpdate(const HvacSettings& settings_update) {
-    // TODO(awong): Implement.
+    if (auto new_value = settings_update.Get<Power>()) Set(new_value.value());
+    if (auto new_value = settings_update.Get<Mode>()) Set(new_value.value());
+    if (auto new_value = settings_update.Get<Fan>()) Set(new_value.value());
+    if (auto new_value = settings_update.Get<Vane>()) Set(new_value.value());
+    if (auto new_value = settings_update.Get<WideVane>()) Set(new_value.value());
   }
     
   // Returns the raw wireformat data bytes for an update packet. The

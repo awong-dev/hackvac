@@ -62,6 +62,10 @@ class Controller {
 
   void SetTemperature(HalfDegreeTemp temp);
 
+  StoredHvacSettings GetSettings() const {
+    return shared_data_.GetStoredHvacSettings();
+  }
+
  private:
   friend class FakeController;
 

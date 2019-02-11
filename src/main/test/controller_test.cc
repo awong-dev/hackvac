@@ -183,6 +183,34 @@ TEST_F(ControllerTest, Timeout) {
 
 // * Normal and Extended settings are pushed to the controller.
 TEST_F(ControllerTest, PushSettings) {
+  StoredHvacSettings settings;
+  settings.Set(Power::kOn);
+  std::unique_ptr<Cn105Packet> settings_update = UpdatePacket::Create(settings);
+  EXPECT_CALL(controller_.mock_hvac_control,
+              EnqueuePacket(
+                  Pointee(
+                      AllOf(Property(&Cn105Packet::type, PacketType::kUpdate),
+                            Property(&Cn105Packet::data_str, settings_update->data_str()))
+                      )
+                  )
+             );
+  controller_.PushSettings(settings);
+
+  StoredExtendedSettings extended_settings;
+  settings.Set(Power::kOn);
+  std::unique_ptr<Cn105Packet> extended_settings_update = UpdatePacket::Create(extended_settings);
+  EXPECT_CALL(controller_.mock_hvac_control,
+              EnqueuePacket(
+                  Pointee(
+                      AllOf(Property(&Cn105Packet::type, PacketType::kUpdate),
+                            Property(&Cn105Packet::data_str, extended_settings_update->data_str()))
+                      )
+                  )
+             );
+  controller_.PushExtendedSettings(extended_settings);
+
+  event_manager_.Run([=]{event_manager_.Quit();});
+  event_manager_.Loop();
 }
 
 // * State received from hvac unit is stored.

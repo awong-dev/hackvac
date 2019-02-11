@@ -70,6 +70,9 @@ class Controller {
     return shared_data_.GetExtendedSettings();
   }
 
+  void PushSettings(const HvacSettings& settings);
+  void PushExtendedSettings(const ExtendedSettings& extended_settings);
+
  private:
   friend class FakeController;
 

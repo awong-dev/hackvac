@@ -52,8 +52,8 @@ void Controller::SharedData::SetExtendedSettings(const ExtendedSettings& extende
     std::lock_guard<esp_cxx::Mutex> lock_(mutex_);
     extended_settings_ = extended_settings;
   }
-  ESP_LOGI(kTag, "extended settings: rt:%d",
-           static_cast<int32_t>(extended_settings.GetRoomTemp().value().whole_degree()));
+//  ESP_LOGI(kTag, "extended settings: rt:%d",
+//           static_cast<int32_t>(extended_settings.GetRoomTemp().value().whole_degree()));
 }
 
 Controller::Controller(esp_cxx::QueueSetEventManager* event_manager)
@@ -99,6 +99,18 @@ void Controller::SetTemperature(HalfDegreeTemp temp) {
 
   event_manager_->Run([this]{ ScheduleCommand(Command::kPushSettings); });
 }
+
+void Controller::PushSettings(const HvacSettings& settings) {
+  shared_data_.SetStoredHvacSettings(settings);
+  event_manager_->Run([this]{ ScheduleCommand(Command::kPushSettings); });
+}
+
+void Controller::PushExtendedSettings(
+    const ExtendedSettings& extended_settings) {
+  shared_data_.SetExtendedSettings(extended_settings);
+  event_manager_->Run([this]{ ScheduleCommand(Command::kPushExtendedSettings); });
+}
+
 
 void Controller::ScheduleCommand(Command command) {
   command_queue_.push_front(command);

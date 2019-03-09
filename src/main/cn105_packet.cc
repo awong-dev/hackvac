@@ -28,8 +28,12 @@ size_t Cn105Packet::NextChunkSize() const {
 
 bool Cn105Packet::IsComplete() const {
   if (IsJunk()) {
-    // TODO(awong): Why did you do this? Junk packets should always be complete, no?
-    return bytes_read_ < bytes_.size();
+    // Defining completion to be buffer-full for junk packets allows
+    // process code to stuff a large sequence of noise bytes in to
+    // one "packet."
+    //
+    // TODO(awong): Is this sensible?
+    return !(bytes_read_ < bytes_.size());
   }
 
   if (!IsHeaderComplete()) {
@@ -39,7 +43,10 @@ bool Cn105Packet::IsComplete() const {
 }
 
 bool Cn105Packet::IsChecksumValid() {
-  // TODO(ajwong): Ensure no off-edge reads!
+  if (!IsHeaderComplete()) {
+    return false;
+  }
+
   return CalculateChecksum(bytes_.data(), packet_size() - 1) ==
     bytes_.at(packet_size() - 1);
 }
@@ -81,15 +88,13 @@ void Cn105Packet::DebugLog() {
   //      ESP_LOGI("hi", "%s %d bytes", dir == PacketDirection::kTx ? "tx" : "rx", packet->packet_size());
   ESP_LOG_BUFFER_HEX_LEVEL("hi", raw_bytes(), raw_bytes_size(), ESP_LOG_INFO);
   // TODO(awong): Print timestamp.
-  if (IsJunk() ||
-      !IsComplete() ||
-      !IsChecksumValid()) {
+  if ((packet_size() > 0) &&
+      (IsJunk() || !IsComplete() || !IsChecksumValid())) {
     ESP_LOGI("hi", "Bad packet. junk: %d complete %d expected checksum %x actual %x",
              IsJunk(),
              IsComplete(),
-             CalculateChecksum(
-                 raw_bytes(), packet_size() - 1),
-             raw_bytes()[packet_size() - 1]);
+             IsHeaderComplete() ? CalculateChecksum(raw_bytes(), packet_size() - 1) : 0,
+             IsComplete() ? raw_bytes()[packet_size() - 1] : 0);
   }
 }
 

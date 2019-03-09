@@ -215,6 +215,7 @@ TEST_F(ControllerTest, PushSettings) {
 
 // * State received from hvac unit is stored.
 TEST_F(ControllerTest, QueryInfo) {
+  // TODO(awong): Implement query info.
 }
 
 }  // namespace hackvac

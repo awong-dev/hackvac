@@ -11,6 +11,7 @@
 #include "hvac_settings.h"
 
 #include "esp_cxx/cxx17hack.h"
+#include "gtest/gtest_prod.h"
 
 namespace hackvac {
 
@@ -90,10 +91,36 @@ class Cn105Packet {
     // Simple thunk to call DebugLog() on the given packet.
     static void LogPacketThunk(std::unique_ptr<Cn105Packet> packet);
 
-    ///
-    /// Packet Building functions. Typically used when populating a default
-    /// constructed packet byte-by-byte from an input stream.
-    ///
+    // Calculates the CN105 protocol checksum for the given bytes. The
+    // checksum algorithm, based on reverse-engineering packet captures
+    // from CN105 to a PAC444CN, is checksum = (0xfc - sum(data)) & 0xff
+    static uint8_t CalculateChecksum(const uint8_t* bytes, size_t size);
+
+    //
+    // Accessors
+    //
+
+    // Raw data acessors. Always accessible.
+    const uint8_t* raw_bytes() const { return bytes_.data(); }
+    size_t raw_bytes_size() const { return bytes_read_; }
+    std::string_view raw_bytes_str() const { return {reinterpret_cast<const char*>(raw_bytes()), raw_bytes_size()}; }
+    // Header accessors. Returns valid data when IsHeaderComplete() is true.
+    // TODO(awong): Move to sub API that's guarded by IsHeaderComplete() check.
+    PacketType type() const { return static_cast<PacketType>(bytes_[kTypePos]); }
+    size_t data_size() const { return bytes_[kDataLenPos]; }
+
+    // Data accessors. Valid to call (will not crash) after IsHeaderComplete()
+    // is true, but data() may contain corrupt values if IsComplete() is false.
+    uint8_t* data() { return &bytes_[kDataStartPos]; }
+    const uint8_t* data() const { return &bytes_[kDataStartPos]; }
+    std::string_view data_str() const { return {reinterpret_cast<const char*>(&bytes_[kDataStartPos]), data_size()}; }
+    size_t packet_size() const { return kHeaderLength + data_size() + kChecksumSize; }
+
+
+    //
+    // Packet Building functions. Typically used when populating a default
+    // constructed packet byte-by-byte from an input stream.
+    //
 
     // Counts UART receive errors. This and IncrementUnexpectedEventCount()
     // update the last_error_ts.
@@ -115,33 +142,20 @@ class Cn105Packet {
     bool IsHeaderComplete() const;
 
     // Returns true if current packet is complete.
+    // For junk-packets, this is only true when the underlying buffer is full.
     bool IsComplete() const;
 
     // Verifies the checksum on the packet.
     bool IsChecksumValid();
 
-    // Calculates the CN105 protocol checksum for the given bytes. The
-    // checksum algorithm, based on reverse-engineering packet captures
-    // from CN105 to a PAC444CN, is checksum = (0xfc - sum(data)) & 0xff
-    static uint8_t CalculateChecksum(const uint8_t* bytes, size_t size);
-
     // Returns number of bytes that should be read next.
     size_t NextChunkSize() const;
 
-    // Header accessors. Returns valid data when IsHeaderComplete() is true.
-    PacketType type() const { return static_cast<PacketType>(bytes_[kTypePos]); }
-    uint8_t* data() { return &bytes_[kDataStartPos]; }
-    const uint8_t* data() const { return &bytes_[kDataStartPos]; }
-    size_t data_size() const { return bytes_[kDataLenPos]; }
-    std::string_view data_str() const { return {reinterpret_cast<const char*>(&bytes_[kDataStartPos]), data_size()}; }
-
-    size_t packet_size() const { return kHeaderLength + data_size() + kChecksumSize; }
-    const uint8_t* raw_bytes() const { return bytes_.data(); }
-    size_t raw_bytes_size() const { return bytes_read_; }
-    std::string_view raw_bytes_str() const { return {reinterpret_cast<const char*>(raw_bytes()), raw_bytes_size()}; }
-
     // Known value constants.
     static constexpr uint8_t kPacketStartMarker = 0xfc;
+
+  private:
+    FRIEND_TEST(Cn105Packet, PacketParsing);
 
     // Size constants.
     static constexpr size_t kHeaderLength = 5;
@@ -153,10 +167,9 @@ class Cn105Packet {
     static constexpr size_t kDataLenPos = 4;
     static constexpr size_t kDataStartPos = 5;
 
-  private:
     // https://github.com/SwiCago/HeatPump assumes 22 byte max for full packet
     // but format-wise, data_len can be 255 so max packet size may be 261.
-    // However that would be wasteful in memory usage so rouding up to 30.
+    // However that would be wasteful in memory usage so rounding up to 30.
     constexpr static size_t kMaxPacketLength = 30;
 
     size_t bytes_read_ = 0;

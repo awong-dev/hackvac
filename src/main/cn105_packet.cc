@@ -4,7 +4,10 @@
 
 namespace hackvac {
 
-Cn105Packet::Cn105Packet() = default;
+Cn105Packet::Cn105Packet()
+  : bytes_({}) {
+}
+
 Cn105Packet::~Cn105Packet() = default;
 
 bool Cn105Packet::IsHeaderComplete() const {
@@ -12,8 +15,7 @@ bool Cn105Packet::IsHeaderComplete() const {
 }
 
 bool Cn105Packet::IsJunk() const {
-  return (bytes_read_ > 0) && (bytes_[0] != kPacketStartMarker);
-}
+  return (bytes_read_ > 0) && (bytes_[0] != kPacketStartMarker); }
 
 size_t Cn105Packet::NextChunkSize() const {
   if (IsJunk()) {

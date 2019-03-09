@@ -156,6 +156,7 @@ class Cn105Packet {
 
   private:
     FRIEND_TEST(Cn105Packet, PacketParsing);
+    FRIEND_TEST(Cn105Packet, IsJunk);
 
     // Size constants.
     static constexpr size_t kHeaderLength = 5;

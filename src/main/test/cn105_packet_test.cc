@@ -37,6 +37,13 @@ TEST(Cn105Packet, IsJunk) {
   EXPECT_FALSE(packet.IsChecksumValid());
 }
 
+// This uber test covers lots of APIs
+//   - IsHeaderComplete() is false until kHeaderLength is read.
+//   - IsComplete() is false until enough data is read.
+//   - NextChunkSize() adjusts to the current parsing state (header, data)
+//   - raw_bytes*() accessors behave properly.
+//   - AppendByte() correctly builds packet.
+//   - IsChecksumValid() actually validates the checksum.
 TEST(Cn105Packet, PacketParsing) {
   Cn105Packet packet;
   // Validate initial state of accessors and completness markers.
@@ -89,10 +96,21 @@ TEST(Cn105Packet, PacketParsing) {
   EXPECT_FALSE(packet.IsComplete());
 
   // Insert checksum byte.
+  EXPECT_FALSE(packet.IsChecksumValid());
   packet.AppendByte(Cn105Packet::CalculateChecksum(packet.raw_bytes(), packet.packet_size() - 1));
   EXPECT_TRUE(packet.IsHeaderComplete());
   EXPECT_TRUE(packet.IsChecksumValid());
   EXPECT_EQ(0, packet.NextChunkSize());
+}
+
+// Golden value tests to verify the checksum relation.
+TEST(Cn105Packet, CalculateChecksum) {
+  std::array<uint8_t, 5> sum1({ 0xfc, 0, 0, 1, 1 });
+  EXPECT_EQ(0xfe, Cn105Packet::CalculateChecksum(sum1.data(), sum1.size()));
+  std::array<uint8_t, 5> sum2({ 0xfc, 1, 0, 1, 1 });
+  EXPECT_EQ(0xfd, Cn105Packet::CalculateChecksum(sum2.data(), sum2.size()));
+  std::array<uint8_t, 5> sum3({ 0, 1, 0, 1, 1 });
+  EXPECT_EQ(0xf9, Cn105Packet::CalculateChecksum(sum3.data(), sum3.size()));
 }
 
 }  // namespace hackvac

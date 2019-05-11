@@ -93,7 +93,12 @@ class Cn105Packet {
 
     // Calculates the CN105 protocol checksum for the given bytes. The
     // checksum algorithm, based on reverse-engineering packet captures
-    // from CN105 to a PAC444CN, is checksum = (0xfc - sum(data)) & 0xff
+    // from CN105 to a PAC444CN, is
+    //     checksum = (0xfc - sum(data)) & 0xff
+    // where data contains all bytes including the 0xfc start marker.
+    // Thus the checksum is technically overall bytes after the start marker
+    // but starting with the 0xfc allows CalculateChecksum to detect a
+    // corrupted start marker.
     static uint8_t CalculateChecksum(const uint8_t* bytes, size_t size);
 
     //

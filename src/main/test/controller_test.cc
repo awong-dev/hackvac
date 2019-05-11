@@ -174,11 +174,13 @@ TEST_F(ControllerTest, PassThru) {
 // * Logs all packets from both interfaces, including junk, incomplete, invalid
 //   checksum and bad packet type.
 TEST_F(ControllerTest, Logging) {
+  // TODO(awong): Test logging.
 }
 
 // * Timeout causes an attempt to reconnect.
 // * Timeout will occur even if other events are queued.
 TEST_F(ControllerTest, Timeout) {
+  // TODO(awong): Test timeouts.
 }
 
 // * Normal and Extended settings are pushed to the controller.

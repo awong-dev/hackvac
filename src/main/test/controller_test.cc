@@ -6,6 +6,7 @@
 #include "gmock/gmock.h"
 
 using testing::AllOf;
+using testing::AtLeast;
 using testing::ElementsAreArray;
 using testing::Eq;
 using testing::Mock;
@@ -14,6 +15,11 @@ using testing::Property;
 using testing::_;
 
 namespace hackvac {
+class MockPacketLogger : public esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>> {
+ public:
+  MOCK_METHOD2(Log, void(const char*, std::unique_ptr<Cn105Packet>));
+};
+
 class MockHalfDuplexChannel : public HalfDuplexChannel {
  public:
   MockHalfDuplexChannel()
@@ -171,10 +177,39 @@ TEST_F(ControllerTest, PassThru) {
   controller_.OnThermostatPacket(std::move(junk_packet));
 }
 
-// * Logs all packets from both interfaces, including junk, incomplete, invalid
-//   checksum and bad packet type.
+// * Logs all packets from both interfaces, including
+//     * junk
+//     * incomplete
+//     * invalid checksum
+//     * bad packet type
+// * Logs in pass-thru mode.
 TEST_F(ControllerTest, Logging) {
-  // TODO(awong): Test logging.
+  // TODO(awong): Complete log testing. This only does the junk packets.
+  std::array<uint8_t, 2> junk1 = {0x01, 0x02};
+  std::array<uint8_t, 2> junk2 = {0x03, 0x04};
+
+  auto mock_logger_holder = std::make_unique<MockPacketLogger>();
+  MockPacketLogger* mock_logger = mock_logger_holder.get();
+  controller_.SetPacketLogger(std::move(mock_logger_holder));
+
+  // Send a junk hvac control packet.
+  std::unique_ptr<Cn105Packet> junk_packet = std::make_unique<Cn105Packet>();
+  junk_packet->AppendByte(junk1[0]);
+  junk_packet->AppendByte(junk1[1]);
+  EXPECT_CALL(*mock_logger,
+              Log(Controller::kHvacRxTag,
+                  Property(&std::unique_ptr<Cn105Packet>::get, junk_packet.get())));
+  controller_.OnHvacControlPacket(std::move(junk_packet));
+  testing::Mock::VerifyAndClear(mock_logger);
+
+  junk_packet = std::make_unique<Cn105Packet>();
+  junk_packet->AppendByte(junk2[0]);
+  junk_packet->AppendByte(junk2[1]);
+  EXPECT_CALL(*mock_logger,
+              Log(Controller::kTstatRxTag, 
+                  Property(&std::unique_ptr<Cn105Packet>::get, junk_packet.get())));
+  controller_.OnThermostatPacket(std::move(junk_packet));
+  testing::Mock::VerifyAndClear(mock_logger);
 }
 
 // * Timeout causes an attempt to reconnect.

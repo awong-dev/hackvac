@@ -21,6 +21,11 @@ constexpr esp_cxx::Gpio kTstatRxPin = esp_cxx::Gpio::Pin<17>();
 
 namespace hackvac {
 
+const char Controller::kTstatRxTag[] = "T-Rx";
+const char Controller::kTstatTxTag[] = "T-Tx";
+const char Controller::kHvacRxTag[] = "H-Rx";
+const char Controller::kHvacTxTag[] = "H-Tx";
+
 StoredHvacSettings Controller::SharedData::GetStoredHvacSettings() const {
   std::lock_guard<esp_cxx::Mutex> lock_(mutex_);
   return hvac_settings_;
@@ -70,14 +75,14 @@ Controller::Controller(esp_cxx::QueueSetEventManager* event_manager)
                     OnHvacControlPacket(std::move(packet));
                   },
                   [this](std::unique_ptr<Cn105Packet> packet) {
-                    packet_logger_.Log(std::move(packet));
+                    packet_logger_->Log(kHvacTxTag, std::move(packet));
                   }),
     thermostat_(event_manager_, kTstatUart, kTstatTxPin, kTstatRxPin,
                 [this](std::unique_ptr<Cn105Packet> packet) {
                   OnThermostatPacket(std::move(packet));
                 },
                 [this](std::unique_ptr<Cn105Packet> packet) {
-                  packet_logger_.Log(std::move(packet));
+                  packet_logger_->Log(kTstatTxTag, std::move(packet));
                 },
                 esp_cxx::Gpio::Pin<23>(),
                 esp_cxx::Gpio::Pin<22>()) {
@@ -173,6 +178,7 @@ void Controller::OnHvacControlPacket(
     thermostat()->EnqueuePacket(std::move(hvac_packet));
     return;
   }
+  packet_logger_->Log(kHvacRxTag, std::move(hvac_packet));
 
   if (hvac_packet->IsJunk()) {
     // Junk is likely either be line-noise or a desyced packet start. Ignore.
@@ -276,7 +282,7 @@ void Controller::OnThermostatPacket(
       }
     }
 
-    packet_logger_.Log(std::move(thermostat_packet));
+    packet_logger_->Log(kTstatRxTag, std::move(thermostat_packet));
   }
 }
 

@@ -53,6 +53,17 @@ class Controller {
   explicit Controller(esp_cxx::QueueSetEventManager* event_manager);
   ESPCXX_MOCKABLE ~Controller();
 
+  // Used to set the packet logger. Only call before Start() otherwise
+  // there will be a race condition.
+  using PacketLoggerType = esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>>;
+  void SetPacketLogger(std::unique_ptr<PacketLoggerType> packet_logger) {
+    packet_logger_ = std::move(packet_logger);
+  }
+  static const char kTstatRxTag[];
+  static const char kTstatTxTag[];
+  static const char kHvacRxTag[];
+  static const char kHvacTxTag[];
+
   // Starts the message processing.
   void Start();
 
@@ -127,7 +138,7 @@ class Controller {
   bool is_command_oustanding_ = false;
 
   // Asynchronous logger to track protocol interactions.
-  esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacketThunk> packet_logger_{"packets"};
+  std::unique_ptr<PacketLoggerType> packet_logger_ = std::make_unique<PacketLoggerType>();
 
   // Ensures locked access to shared fields.
   class SharedData {

@@ -88,6 +88,7 @@ TEST_F(ControllerTest, Start) {
 // * Acks an info request.
 // * Merges an update.
 TEST_F(ControllerTest, OnThermostatPacket) {
+  // Respond to connect packet.
   EXPECT_CALL(controller_.mock_thermostat,
               EnqueuePacket(
                   Pointee(Property(&Cn105Packet::type, PacketType::kConnectAck)))
@@ -95,6 +96,7 @@ TEST_F(ControllerTest, OnThermostatPacket) {
   controller_.OnThermostatPacket(ConnectPacket::Create());
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 
+  // Respond to an extended connect packet.
   EXPECT_CALL(controller_.mock_thermostat,
               EnqueuePacket(
                   Pointee(Property(&Cn105Packet::type, PacketType::kExtendedConnectAck)))
@@ -102,6 +104,7 @@ TEST_F(ControllerTest, OnThermostatPacket) {
   controller_.OnThermostatPacket(ExtendedConnectPacket::Create());
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 
+  // Respond to a settings update packet.
   StoredHvacSettings settings;
   settings.Set(Power::kOn);
   EXPECT_CALL(controller_.mock_thermostat,
@@ -115,6 +118,7 @@ TEST_F(ControllerTest, OnThermostatPacket) {
   EXPECT_EQ(orig_settings.Get<Power>(), Power::kOn);
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 
+  // Responds to a settings query packet.
   std::unique_ptr<Cn105Packet> settings_ack = InfoAckPacket::Create(controller_.GetSettings());
   EXPECT_CALL(controller_.mock_thermostat,
               EnqueuePacket(
@@ -128,6 +132,7 @@ TEST_F(ControllerTest, OnThermostatPacket) {
   controller_.OnThermostatPacket(InfoPacket::Create(CommandType::kSettings));
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 
+  // Respond to a room tempeature set packet.
   StoredExtendedSettings extended_settings;
   static constexpr HalfDegreeTemp kTestRoomTemp(20, true);
   extended_settings.SetRoomTemp(kTestRoomTemp);
@@ -143,6 +148,7 @@ TEST_F(ControllerTest, OnThermostatPacket) {
   EXPECT_EQ(new_extended_settings.GetRoomTemp().value(), kTestRoomTemp);
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 
+  // Respond to an exteded settings query packet.
   std::unique_ptr<Cn105Packet> extended_settings_ack =
       InfoAckPacket::Create(controller_.GetExtendedSettings());
   EXPECT_CALL(controller_.mock_thermostat,
@@ -157,6 +163,7 @@ TEST_F(ControllerTest, OnThermostatPacket) {
   controller_.OnThermostatPacket(InfoPacket::Create(CommandType::kExtendedSettings));
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 
+  // Respond to a timer query packet.
   EXPECT_CALL(controller_.mock_thermostat,
               EnqueuePacket(
                   Pointee(Property(&Cn105Packet::type, PacketType::kInfoAck)))
@@ -165,6 +172,7 @@ TEST_F(ControllerTest, OnThermostatPacket) {
   controller_.OnThermostatPacket(InfoPacket::Create(CommandType::kTimers));
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 
+  // Respond to a status query packet.
   EXPECT_CALL(controller_.mock_thermostat,
               EnqueuePacket(
                   Pointee(Property(&Cn105Packet::type, PacketType::kInfoAck)))

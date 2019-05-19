@@ -127,14 +127,20 @@ void Controller::PushExtendedSettings(
 
 
 void Controller::ScheduleCommand(Command command) {
-  command_queue_.push_front(command);
+  command_queue_.push_back(command);
+  ExecuteNextCommand();
+}
+
+void Controller::Reconnect() {
+  command_queue_.push_front(Command::kConnect);
   ExecuteNextCommand();
 }
 
 void Controller::ExecuteNextCommand() {
   // A new command can cause this loop to enter before the current command
   // is complete. In this case, just return as command completion will
-  // cause this function to execute again.
+  // cause this function to execute again. Note a timeout will force a
+  // connect command to execute so that case is handled as well.
   if (is_command_oustanding_) {
     return;
   }
@@ -142,8 +148,11 @@ void Controller::ExecuteNextCommand() {
   if (command_queue_.empty()) {
     return;
   }
+
   Command command = command_queue_.front();
   command_queue_.pop_front();
+  is_command_oustanding_ = true;
+  command_number_++;
 
   switch (command) {
     case Command::kConnect:
@@ -167,14 +176,13 @@ void Controller::ExecuteNextCommand() {
       break;
   }
 
-  command_number_++;
-  is_command_oustanding_ = false;
-  constexpr int kProtocolTimeoutMs = 20;
+  static constexpr int kProtocolTimeoutMs = 20;
   event_manager_->RunDelayed(
       [this, prev_command_number = command_number_] {
+        // If the same command is still outstanding, it timed out.
         if (prev_command_number == command_number_ &&
-            !is_command_oustanding_) {
-          ScheduleCommand(Command::kConnect);
+            is_command_oustanding_) {
+          Reconnect();
         }
       }, kProtocolTimeoutMs);
 }
@@ -198,14 +206,14 @@ void Controller::OnHvacControlPacket(
 
   if (!hvac_packet->IsComplete()) {
     // An incomplete packet means something timed out. Reconnect.
-    ScheduleCommand(Command::kConnect);
+    Reconnect();
     return;
   }
 
   // If a complete packet is found, then consider that to indicate a command
   // has triggered some sort of structurally valid response from the unit and
   // thus the command has not timed out.
-  is_command_oustanding_ = true;
+  is_command_oustanding_ = false;
 
   if (!hvac_packet->IsChecksumValid()) {
     // TODO(awong): Increment error count.

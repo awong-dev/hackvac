@@ -182,6 +182,34 @@ TEST_F(ControllerTest, OnThermostatPacket) {
   Mock::VerifyAndClearExpectations(&controller_.mock_thermostat);
 }
 
+TEST_F(ControllerTest, OnHvacControlPacket_ClearsOutstanding) {
+  // Basic test of acks that don't do anything.
+  // TODO(awong): Assert is_command_oustanding_.
+  controller_.OnHvacControlPacket(ConnectAckPacket::Create());
+  controller_.OnHvacControlPacket(ExtendedConnectAckPacket::Create());
+  controller_.OnHvacControlPacket(UpdateAckPacket::Create());
+  controller_.OnHvacControlPacket(InfoAckPacket::Create(controller_.GetSettings()));
+}
+
+//  Data from kInfoAck is merged.
+TEST_F(ControllerTest, OnHvacControlPacket_MergesInfoAckData) {
+  // TODO(awong): Impelment.
+}
+
+// Junk packets are ignored.
+TEST_F(ControllerTest, OnHvacControlPacket_IgnoreJunk) {
+  controller_.OnHvacControlPacket(MakePacket(kJunk1));
+  // no mocks get triggered.
+}
+
+// Incomplete packets trigger a reconnect
+TEST_F(ControllerTest, OnHvacControlPacket_IncompleteReconnects) {
+  auto expected = ConnectPacket::Create();
+  EXPECT_CALL(controller_.mock_hvac_control,
+              EnqueuePacket(Pointee(Property(&Cn105Packet::raw_bytes_str, expected->raw_bytes_str()))));
+  controller_.OnHvacControlPacket(MakePacket(kConnectIncomplete));
+}
+
 // * Packets sent to one interace show up in the other, regardless of type.
 TEST_F(ControllerTest, PassThru) {
   controller_.set_passthru(true);
@@ -260,8 +288,12 @@ TEST_F(ControllerTest, PushSettings) {
              );
   controller_.PushSettings(settings);
 
+  event_manager_.Run([=]{event_manager_.Quit();});
+  event_manager_.Loop();
+}
+
+TEST_F(ControllerTest, PushExtendedSettings) {
   StoredExtendedSettings extended_settings;
-  settings.Set(Power::kOn);
   std::unique_ptr<Cn105Packet> extended_settings_update = UpdatePacket::Create(extended_settings);
   EXPECT_CALL(controller_.mock_hvac_control,
               EnqueuePacket(

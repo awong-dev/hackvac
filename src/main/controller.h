@@ -108,6 +108,9 @@ class Controller {
   // Adds a command to the queue and attempts to run it.
   void ScheduleCommand(Command command);
 
+  // Causes a kConnect command to be put at the front of the queue.
+  void Reconnect();
+
   // Starts the next command in |command_queue_|. This the start of the logical
   // protocol actions and is invoked either on a timer, as a sideffect of a
   // public method call, or in response a packet or uart event.

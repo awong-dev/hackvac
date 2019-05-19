@@ -85,6 +85,10 @@ class Cn105Packet {
 
     ~Cn105Packet();
 
+    // Makes a copy of the current packet. Mostly useful to pass to the
+    // logging system in edge cases.
+    std::unique_ptr<Cn105Packet> Clone();
+
     // Prints a packet to the ESP log stream.
     void DebugLog();
 
@@ -128,11 +132,11 @@ class Cn105Packet {
     //
 
     // Counts UART receive errors. This and IncrementUnexpectedEventCount()
-    // update the last_error_ts.
+    // update the last_error_ts_.
     void IncrementErrorCount();
 
     // Counts unexpected UART events. This and IncrementErrorCount() update
-    // the last_error_ts.
+    // the last_error_ts_.
     void IncrementUnexpectedEventCount();
 
     // Appends a byte to the Cn105Packet.
@@ -188,13 +192,13 @@ class Cn105Packet {
     uint16_t unexpected_event_count_ = 0;
     
     // Timestamp of when the first byte was received.
-    uint32_t first_byte_ts = 0;
+    uint32_t first_byte_ts_ = 0;
 
     // Timestamp of when the most recent byte was received.
-    uint32_t last_byte_ts = 0;
+    uint32_t last_byte_ts_ = 0;
 
     // Timestamp of when the most recent error was received.
-    uint32_t last_error_ts = 0;
+    uint32_t last_error_ts_ = 0;
 };
 
 }  // namespace hackvac

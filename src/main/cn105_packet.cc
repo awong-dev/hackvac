@@ -10,6 +10,18 @@ Cn105Packet::Cn105Packet()
 
 Cn105Packet::~Cn105Packet() = default;
 
+std::unique_ptr<Cn105Packet> Cn105Packet::Clone() {
+  auto packet = std::make_unique<Cn105Packet>();
+  packet->bytes_read_ = bytes_read_;
+  packet->bytes_ = bytes_;
+  packet->error_count_ = error_count_;
+  packet->unexpected_event_count_ = unexpected_event_count_;
+  packet->first_byte_ts_ = first_byte_ts_;
+  packet->last_byte_ts_ = last_byte_ts_;
+  packet->last_error_ts_ = last_error_ts_;
+  return packet;
+}
+
 bool Cn105Packet::IsHeaderComplete() const {
   return bytes_read_ >= kHeaderLength;
 }
@@ -62,19 +74,19 @@ uint8_t Cn105Packet::CalculateChecksum(const uint8_t* bytes, size_t size) {
 }
 
 void Cn105Packet::IncrementErrorCount() {
-  last_error_ts = esp_log_timestamp();
+  last_error_ts_ = esp_log_timestamp();
   error_count_++;
 }
 
 void Cn105Packet::IncrementUnexpectedEventCount() {
-  last_error_ts = esp_log_timestamp();
+  last_error_ts_ = esp_log_timestamp();
   unexpected_event_count_++;
 }
 
 void Cn105Packet::AppendByte(uint8_t byte) {
-  last_byte_ts = esp_log_timestamp();
+  last_byte_ts_ = esp_log_timestamp();
   if (bytes_read_ == 0) {
-    first_byte_ts = last_byte_ts;
+    first_byte_ts_ = last_byte_ts_;
   }
 
   bytes_.at(bytes_read_++) = byte;

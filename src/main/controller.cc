@@ -17,6 +17,15 @@ constexpr esp_cxx::Uart::Chip kTstatUart = esp_cxx::Uart::Chip::kUart2;
 constexpr esp_cxx::Gpio kTstatTxPin = esp_cxx::Gpio::Pin<5>();
 constexpr esp_cxx::Gpio kTstatRxPin = esp_cxx::Gpio::Pin<17>();
 
+class RunOnDestruct {
+ public:
+  template <typename Functor> explicit RunOnDestruct(Functor f) : func_(f) {}
+  ~RunOnDestruct() { func_(); }
+ 
+ private:
+  std::function<void(void)> func_;
+};
+
 }  // namespace
 
 namespace hackvac {
@@ -172,13 +181,15 @@ void Controller::ExecuteNextCommand() {
 
 void Controller::OnHvacControlPacket(
     std::unique_ptr<Cn105Packet> hvac_packet) {
+  RunOnDestruct on_destruct (
+      [&]{if (hvac_packet) packet_logger_->Log(kHvacRxTag, std::move(hvac_packet));});
+
   if (is_passthru_) {
     ESP_LOGI(kTag, "hvac_ctl: %d bytes", hvac_packet->packet_size());
     ESP_LOG_BUFFER_HEX_LEVEL(kTag, hvac_packet->raw_bytes(), hvac_packet->packet_size(), ESP_LOG_INFO); 
-    thermostat()->EnqueuePacket(std::move(hvac_packet));
+    thermostat()->EnqueuePacket(hvac_packet->Clone());
     return;
   }
-  packet_logger_->Log(kHvacRxTag, std::move(hvac_packet));
 
   if (hvac_packet->IsJunk()) {
     // Junk is likely either be line-noise or a desyced packet start. Ignore.
@@ -232,8 +243,10 @@ void Controller::OnHvacControlPacket(
 
 void Controller::OnThermostatPacket(
     std::unique_ptr<Cn105Packet> thermostat_packet) {
+  RunOnDestruct on_destruct (
+      [&]{if (thermostat_packet) packet_logger_->Log(kTstatRxTag, std::move(thermostat_packet));});
   if (is_passthru_) {
-    hvac_control()->EnqueuePacket(std::move(thermostat_packet));
+    hvac_control()->EnqueuePacket(thermostat_packet->Clone());
   } else {
     if (!thermostat_packet->IsJunk() &&
         thermostat_packet->IsComplete() &&
@@ -281,8 +294,6 @@ void Controller::OnThermostatPacket(
           break;
       }
     }
-
-    packet_logger_->Log(kTstatRxTag, std::move(thermostat_packet));
   }
 }
 

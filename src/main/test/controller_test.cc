@@ -15,6 +15,25 @@ using testing::Property;
 using testing::_;
 
 namespace hackvac {
+namespace {
+constexpr std::array<uint8_t, 2> kJunk1 = {0x01, 0x02};
+constexpr std::array<uint8_t, 2> kJunk2 = {0x03, 0x04};
+constexpr std::array<uint8_t, 8> kConnect = { 0xfc, 0x5a, 0x01, 0x30, 0x02, 0xca, 0x01, 0xa8 };
+constexpr std::array<uint8_t, 6> kConnectIncomplete = { 0xfc, 0x5a, 0x01, 0x30, 0x02, 0xca };
+constexpr std::array<uint8_t, 8> kConnectBadChecksum = { 0xfc, 0x5a, 0x01, 0x30, 0x02, 0xca, 0x01, 0xa6 };
+constexpr std::array<uint8_t, 8> kBadType = { 0xfc, 0x59, 0x01, 0x30, 0x02, 0xca, 0x01, 0xa9 };
+
+template <size_t n>
+std::unique_ptr<Cn105Packet> MakePacket(const std::array<uint8_t, n>& data) {
+  auto packet = std::make_unique<Cn105Packet>();
+  for (auto byte : data) {
+    packet->AppendByte(byte);
+  }
+  return packet;
+}
+
+}  // namespace
+
 class MockPacketLogger : public esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>> {
  public:
   MOCK_METHOD2(Log, void(const char*, std::unique_ptr<Cn105Packet>));
@@ -158,23 +177,13 @@ TEST_F(ControllerTest, OnThermostatPacket) {
 // * Packets sent to one interace show up in the other, regardless of type.
 TEST_F(ControllerTest, PassThru) {
   controller_.set_passthru(true);
-  std::array<uint8_t, 2> junk1 = {0x01, 0x02};
-  std::array<uint8_t, 2> junk2 = {0x03, 0x04};
-
   EXPECT_CALL(controller_.mock_thermostat,
-              EnqueuePacket(Pointee(Property(&Cn105Packet::raw_bytes_str, ElementsAreArray(junk1)))));
+              EnqueuePacket(Pointee(Property(&Cn105Packet::raw_bytes_str, ElementsAreArray(kJunk1)))));
   EXPECT_CALL(controller_.mock_hvac_control,
-              EnqueuePacket(Pointee(Property(&Cn105Packet::raw_bytes_str, ElementsAreArray(junk2)))));
+              EnqueuePacket(Pointee(Property(&Cn105Packet::raw_bytes_str, ElementsAreArray(kJunk2)))));
 
-  std::unique_ptr<Cn105Packet> junk_packet = std::make_unique<Cn105Packet>();
-  junk_packet->AppendByte(junk1[0]);
-  junk_packet->AppendByte(junk1[1]);
-  controller_.OnHvacControlPacket(std::move(junk_packet));
-
-  junk_packet = std::make_unique<Cn105Packet>();
-  junk_packet->AppendByte(junk2[0]);
-  junk_packet->AppendByte(junk2[1]);
-  controller_.OnThermostatPacket(std::move(junk_packet));
+  controller_.OnHvacControlPacket(MakePacket(kJunk1));
+  controller_.OnThermostatPacket(MakePacket(kJunk2));
 }
 
 // * Logs all packets from both interfaces, including
@@ -184,32 +193,42 @@ TEST_F(ControllerTest, PassThru) {
 //     * bad packet type
 // * Logs in pass-thru mode.
 TEST_F(ControllerTest, Logging) {
-  // TODO(awong): Complete log testing. This only does the junk packets.
-  std::array<uint8_t, 2> junk1 = {0x01, 0x02};
-  std::array<uint8_t, 2> junk2 = {0x03, 0x04};
+  // Not testing what happens with a packet, so cut the dependency on the channel
+  // with a super permissive mock.
+  EXPECT_CALL(controller_.mock_thermostat, EnqueuePacket(_)).Times(AtLeast(0));
+  EXPECT_CALL(controller_.mock_hvac_control, EnqueuePacket(_)).Times(AtLeast(0));
 
-  auto mock_logger_holder = std::make_unique<MockPacketLogger>();
+  auto mock_logger_holder = std::make_unique<testing::StrictMock<MockPacketLogger>>();
   MockPacketLogger* mock_logger = mock_logger_holder.get();
   controller_.SetPacketLogger(std::move(mock_logger_holder));
 
-  // Send a junk hvac control packet.
-  std::unique_ptr<Cn105Packet> junk_packet = std::make_unique<Cn105Packet>();
-  junk_packet->AppendByte(junk1[0]);
-  junk_packet->AppendByte(junk1[1]);
-  EXPECT_CALL(*mock_logger,
-              Log(Controller::kHvacRxTag,
-                  Property(&std::unique_ptr<Cn105Packet>::get, junk_packet.get())));
-  controller_.OnHvacControlPacket(std::move(junk_packet));
-  testing::Mock::VerifyAndClear(mock_logger);
+  // Write a little helper lambda for doing the test.
+  auto do_test = [&](auto data) {
+    std::unique_ptr<Cn105Packet> packet = MakePacket(data);
+    EXPECT_CALL(*mock_logger,
+                Log(Controller::kHvacRxTag,
+                    Property(&std::unique_ptr<Cn105Packet>::get, packet.get())));
+    controller_.OnHvacControlPacket(std::move(packet));
+    testing::Mock::VerifyAndClear(mock_logger);
 
-  junk_packet = std::make_unique<Cn105Packet>();
-  junk_packet->AppendByte(junk2[0]);
-  junk_packet->AppendByte(junk2[1]);
-  EXPECT_CALL(*mock_logger,
-              Log(Controller::kTstatRxTag, 
-                  Property(&std::unique_ptr<Cn105Packet>::get, junk_packet.get())));
-  controller_.OnThermostatPacket(std::move(junk_packet));
-  testing::Mock::VerifyAndClear(mock_logger);
+    packet = MakePacket(data);
+    EXPECT_CALL(*mock_logger,
+                Log(Controller::kTstatRxTag, 
+                    Property(&std::unique_ptr<Cn105Packet>::get, packet.get())));
+    controller_.OnThermostatPacket(std::move(packet));
+    testing::Mock::VerifyAndClear(mock_logger);
+  };
+
+  // Actually invoke the test cases.
+  { SCOPED_TRACE("junk"); do_test(kJunk1); }
+  { SCOPED_TRACE("good"); do_test(kConnect); }
+  { SCOPED_TRACE("incomplete"); do_test(kConnectIncomplete); }
+  { SCOPED_TRACE("checksum"); do_test(kConnectBadChecksum); }
+  { SCOPED_TRACE("type"); do_test(kBadType); }
+
+  // Test that packets are logged on receive in pass-thru mode.
+  controller_.set_passthru(true);
+  { SCOPED_TRACE("passthru junk"); do_test(kJunk1); }
 }
 
 // * Timeout causes an attempt to reconnect.

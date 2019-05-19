@@ -14,14 +14,15 @@ void app_main() {
 #include <execinfo.h>
 #include <signal.h>
 #include <unistd.h>
-void OnSigabrt(int signal) {
+void OnCrash(int signal) {
   void* trace[32];
   int frames = backtrace(&trace[0], 32);
   backtrace_symbols_fd(trace, frames, STDERR_FILENO);
 }
 
 int main(void) {
-  signal(SIGABRT, &OnSigabrt);
+  signal(SIGABRT, &OnCrash);
+  signal(SIGSEGV, &OnCrash);
   app_main();
   return 0;
 }

@@ -125,7 +125,8 @@ void cpp_entry() {
 
   // Initialize hackvac controller and run on higher priority thread.
   QueueSetEventManager controller_event_manager(100);  // TODO(awong): Size this.
-  static hackvac::Controller controller(&controller_event_manager);
+  esp_cxx::AsyncDataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacketThunk> data_logger("hi");
+  static hackvac::Controller controller(&controller_event_manager, &data_logger);
   controller.Start();
   Task controller_task = Task::Create<EventManager, &EventManager::Loop>(&controller_event_manager, "controller");
 

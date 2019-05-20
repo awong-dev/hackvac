@@ -49,8 +49,9 @@ class MockHalfDuplexChannel : public HalfDuplexChannel {
 
 class FakeController : public Controller {
  public:
-  FakeController(esp_cxx::QueueSetEventManager* event_manager)
-    : Controller(event_manager) {
+  FakeController(esp_cxx::QueueSetEventManager* event_manager,
+                 PacketLoggerType* packet_logger)
+    : Controller(event_manager, packet_logger) {
   }
 
   HalfDuplexChannel* hvac_control() override { return &mock_hvac_control; }
@@ -67,8 +68,15 @@ class FakeController : public Controller {
 
 class ControllerTest : public ::testing::Test {
  protected:
+  // Most tests do not want to verify the packet logger behavior.
+  // Call this function to make the mock just read and drop messages.
+  void IgnoreLogCalls() {
+    EXPECT_CALL(mock_packet_logger_, Log(_,_)).Times(AtLeast(0));
+  }
+
   esp_cxx::QueueSetEventManager event_manager_{10};
-  FakeController controller_{&event_manager_};
+  testing::StrictMock<MockPacketLogger> mock_packet_logger_;
+  FakeController controller_{&event_manager_, &mock_packet_logger_};
 };
 
 // * Sends connect packet.
@@ -89,6 +97,8 @@ TEST_F(ControllerTest, Start) {
 // * Acks an info request.
 // * Merges an update.
 TEST_F(ControllerTest, OnThermostatPacket) {
+  IgnoreLogCalls();
+
   // Respond to connect packet.
   EXPECT_CALL(controller_.mock_thermostat,
               EnqueuePacket(
@@ -184,6 +194,8 @@ TEST_F(ControllerTest, OnThermostatPacket) {
 }
 
 TEST_F(ControllerTest, OnHvacControlPacket_ClearsOutstanding) {
+  IgnoreLogCalls();
+
   // Basic test of acks that don't do anything.
   controller_.is_command_oustanding_ = true;
   controller_.OnHvacControlPacket(ConnectAckPacket::Create());
@@ -209,6 +221,8 @@ TEST_F(ControllerTest, OnHvacControlPacket_MergesInfoAckData) {
 
 // Junk packets are ignored.
 TEST_F(ControllerTest, OnHvacControlPacket_IgnoreJunk) {
+  IgnoreLogCalls();
+
   controller_.is_command_oustanding_ = true;
   controller_.OnHvacControlPacket(MakePacket(kJunk1));
   EXPECT_TRUE(controller_.is_command_oustanding_);
@@ -217,6 +231,8 @@ TEST_F(ControllerTest, OnHvacControlPacket_IgnoreJunk) {
 
 // Incomplete packets trigger a reconnect
 TEST_F(ControllerTest, OnHvacControlPacket_IncompleteReconnects) {
+  IgnoreLogCalls();
+
   auto expected = ConnectPacket::Create();
   EXPECT_CALL(controller_.mock_hvac_control,
               EnqueuePacket(Pointee(Property(&Cn105Packet::raw_bytes_str, expected->raw_bytes_str()))));
@@ -225,6 +241,8 @@ TEST_F(ControllerTest, OnHvacControlPacket_IncompleteReconnects) {
 
 // * Packets sent to one interace show up in the other, regardless of type.
 TEST_F(ControllerTest, PassThru) {
+  IgnoreLogCalls();
+
   EXPECT_FALSE(controller_.is_passthru());
   controller_.set_passthru(true);
   EXPECT_TRUE(controller_.is_passthru());
@@ -250,25 +268,21 @@ TEST_F(ControllerTest, Logging) {
   EXPECT_CALL(controller_.mock_thermostat, EnqueuePacket(_)).Times(AtLeast(0));
   EXPECT_CALL(controller_.mock_hvac_control, EnqueuePacket(_)).Times(AtLeast(0));
 
-  auto mock_logger_holder = std::make_unique<testing::StrictMock<MockPacketLogger>>();
-  MockPacketLogger* mock_logger = mock_logger_holder.get();
-  controller_.SetPacketLogger(std::move(mock_logger_holder));
-
   // Write a little helper lambda for doing the test.
   auto do_test = [&](auto data) {
     std::unique_ptr<Cn105Packet> packet = MakePacket(data);
-    EXPECT_CALL(*mock_logger,
+    EXPECT_CALL(mock_packet_logger_,
                 Log(Controller::kHvacRxTag,
                     Property(&std::unique_ptr<Cn105Packet>::get, packet.get())));
     controller_.OnHvacControlPacket(std::move(packet));
-    testing::Mock::VerifyAndClear(mock_logger);
+    testing::Mock::VerifyAndClear(&mock_packet_logger_);
 
     packet = MakePacket(data);
-    EXPECT_CALL(*mock_logger,
+    EXPECT_CALL(mock_packet_logger_,
                 Log(Controller::kTstatRxTag, 
                     Property(&std::unique_ptr<Cn105Packet>::get, packet.get())));
     controller_.OnThermostatPacket(std::move(packet));
-    testing::Mock::VerifyAndClear(mock_logger);
+    testing::Mock::VerifyAndClear(&mock_packet_logger_);
   };
 
   // Actually invoke the test cases.

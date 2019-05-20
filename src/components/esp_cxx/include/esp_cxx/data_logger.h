@@ -41,9 +41,8 @@ class AsyncDataLogger : public DataLogger<T> {
  private:
   void LogTaskRunLoop() {
     for (;;) {
-      T data;
-      while (data_log_.Get(&data)) {
-        LogFunc(std::move(data));
+      while (auto data = data_log_.Get()) {
+        LogFunc(std::move(data.value()));
       }
       Task::CurrentTaskWait();
     }

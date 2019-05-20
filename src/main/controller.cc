@@ -70,8 +70,10 @@ void Controller::SharedData::SetExtendedSettings(const ExtendedSettings& extende
 //           static_cast<int32_t>(extended_settings.GetRoomTemp().value().whole_degree()));
 }
 
-Controller::Controller(esp_cxx::QueueSetEventManager* event_manager)
+Controller::Controller(esp_cxx::QueueSetEventManager* event_manager,
+                       PacketLoggerType* packet_logger)
   : event_manager_(event_manager),
+    packet_logger_(packet_logger),
     hvac_control_(event_manager_, kCn105Uart, kCn105TxPin, kCn105RxPin,
                   // TODO(awong): Send status to the controller about once a second.
                   // Sequence seems to be:

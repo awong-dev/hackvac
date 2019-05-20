@@ -50,15 +50,12 @@ namespace hackvac {
 
 class Controller {
  public:
-  explicit Controller(esp_cxx::QueueSetEventManager* event_manager);
+  using PacketLoggerType = esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>>;
+
+  Controller(esp_cxx::QueueSetEventManager* event_manager,
+             PacketLoggerType* packet_logger);
   ESPCXX_MOCKABLE ~Controller();
 
-  // Used to set the packet logger. Only call before Start() otherwise
-  // there will be a race condition.
-  using PacketLoggerType = esp_cxx::DataLogger<std::unique_ptr<Cn105Packet>>;
-  void SetPacketLogger(std::unique_ptr<PacketLoggerType> packet_logger) {
-    packet_logger_ = std::move(packet_logger);
-  }
   static const char kTstatRxTag[];
   static const char kTstatTxTag[];
   static const char kHvacRxTag[];
@@ -124,11 +121,14 @@ class Controller {
   // Generates an Ack for an info packet.
   std::unique_ptr<Cn105Packet> CreateInfoAck(InfoPacket info);
 
-  // Sets the state.
-  bool is_passthru_ = false;
-
   // Event manager for handling all incoming data.
   esp_cxx::QueueSetEventManager* event_manager_;
+
+  // Asynchronous logger to track protocol interactions.
+  PacketLoggerType* packet_logger_;
+
+  // Sets the state.
+  bool is_passthru_ = false;
 
   // Channel talking to the HVAC control unit.
   HalfDuplexChannel hvac_control_;
@@ -144,9 +144,6 @@ class Controller {
 
   // Whether or not the current command has received an ack.
   bool is_command_oustanding_ = false;
-
-  // Asynchronous logger to track protocol interactions.
-  std::unique_ptr<PacketLoggerType> packet_logger_ = std::make_unique<PacketLoggerType>();
 
   // Ensures locked access to shared fields.
   class SharedData {

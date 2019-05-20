@@ -125,6 +125,13 @@ void Controller::PushExtendedSettings(
   event_manager_->Run([this]{ ScheduleCommand(Command::kPushExtendedSettings); });
 }
 
+void Controller::SyncSettings() {
+  event_manager_->Run([this]{ ScheduleCommand(Command::kQuerySettings); });
+}
+
+void Controller::SyncExtendedSettings() {
+  event_manager_->Run([this]{ ScheduleCommand(Command::kQueryExtendedSettings); });
+}
 
 void Controller::ScheduleCommand(Command command) {
   command_queue_.push_back(command);
@@ -256,6 +263,7 @@ void Controller::OnThermostatPacket(
   if (is_passthru_) {
     hvac_control()->EnqueuePacket(thermostat_packet->Clone());
   } else {
+    // TODO(awong): Reject packets if there hasn't been a connect.
     if (!thermostat_packet->IsJunk() &&
         thermostat_packet->IsComplete() &&
         thermostat_packet->IsChecksumValid()) {

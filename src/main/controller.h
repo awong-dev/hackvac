@@ -81,8 +81,13 @@ class Controller {
     return shared_data_.GetExtendedSettings();
   }
 
+  // Push new settings to the HVAC controller.
   void PushSettings(const HvacSettings& settings);
   void PushExtendedSettings(const ExtendedSettings& extended_settings);
+
+  // Sync settings that the HVAC controller thinks it has.
+  void SyncSettings();
+  void SyncExtendedSettings();
 
  private:
   friend class FakeController;

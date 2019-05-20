@@ -62,6 +62,7 @@ class FakeController : public Controller {
   // Expose for use in testing.
   using Controller::OnThermostatPacket;
   using Controller::OnHvacControlPacket;
+  using Controller::is_command_oustanding_;
 };
 
 class ControllerTest : public ::testing::Test {
@@ -184,22 +185,34 @@ TEST_F(ControllerTest, OnThermostatPacket) {
 
 TEST_F(ControllerTest, OnHvacControlPacket_ClearsOutstanding) {
   // Basic test of acks that don't do anything.
-  // TODO(awong): Assert is_command_oustanding_.
+  controller_.is_command_oustanding_ = true;
   controller_.OnHvacControlPacket(ConnectAckPacket::Create());
+  EXPECT_FALSE(controller_.is_command_oustanding_);
+
+  controller_.is_command_oustanding_ = true;
   controller_.OnHvacControlPacket(ExtendedConnectAckPacket::Create());
+  EXPECT_FALSE(controller_.is_command_oustanding_);
+
+  controller_.is_command_oustanding_ = true;
   controller_.OnHvacControlPacket(UpdateAckPacket::Create());
+  EXPECT_FALSE(controller_.is_command_oustanding_);
+
+  controller_.is_command_oustanding_ = true;
   controller_.OnHvacControlPacket(InfoAckPacket::Create(controller_.GetSettings()));
+  EXPECT_FALSE(controller_.is_command_oustanding_);
 }
 
-//  Data from kInfoAck is merged.
+//  * data from kInfoAck is merged.
 TEST_F(ControllerTest, OnHvacControlPacket_MergesInfoAckData) {
   // TODO(awong): Impelment.
 }
 
 // Junk packets are ignored.
 TEST_F(ControllerTest, OnHvacControlPacket_IgnoreJunk) {
+  controller_.is_command_oustanding_ = true;
   controller_.OnHvacControlPacket(MakePacket(kJunk1));
-  // no mocks get triggered.
+  EXPECT_TRUE(controller_.is_command_oustanding_);
+  // The main test is no mocks get triggered.
 }
 
 // Incomplete packets trigger a reconnect
@@ -212,7 +225,10 @@ TEST_F(ControllerTest, OnHvacControlPacket_IncompleteReconnects) {
 
 // * Packets sent to one interace show up in the other, regardless of type.
 TEST_F(ControllerTest, PassThru) {
+  EXPECT_FALSE(controller_.is_passthru());
   controller_.set_passthru(true);
+  EXPECT_TRUE(controller_.is_passthru());
+
   EXPECT_CALL(controller_.mock_thermostat,
               EnqueuePacket(Pointee(Property(&Cn105Packet::raw_bytes_str, ElementsAreArray(kJunk1)))));
   EXPECT_CALL(controller_.mock_hvac_control,
@@ -309,9 +325,14 @@ TEST_F(ControllerTest, PushExtendedSettings) {
   event_manager_.Loop();
 }
 
-// * State received from hvac unit is stored.
-TEST_F(ControllerTest, QueryInfo) {
-  // TODO(awong): Implement query info.
+// Queries and stores settings from HVAC settings.
+TEST_F(ControllerTest, SyncSettings) {
+  // TODO(awong): Implement.
+}
+
+// Queries and stores extended settings from HVAC settings.
+TEST_F(ControllerTest, SyncExtendedSettings) {
+  // TODO(awong): Implement.
 }
 
 }  // namespace hackvac

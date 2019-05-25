@@ -20,7 +20,11 @@ namespace esp_cxx {
 template <typename T, size_t size>
 class DataBuffer {
  public:
-  uint32_t dropped_elements() const { return dropped_elements_; }
+  uint32_t dropped_elements() const {
+    std::lock_guard<Mutex> lock(mutex_);
+    return dropped_elements_;
+  }
+
   // Adds |obj| into the DataBuffer. If this overwrites 
   T Put(T&& obj) {
     std::lock_guard<Mutex> lock(mutex_);
@@ -56,11 +60,16 @@ class DataBuffer {
     return std::move(data_[offset]);
   }
 
+  size_t NumItems() {
+    std::lock_guard<Mutex> lock(mutex_);
+    return num_items_;
+  }
+
  private:
   Mutex mutex_;
 
   // Number of elements dropped from this queue.
-  std::atomic_uint_fast32_t dropped_elements_{0};
+  uint32_t dropped_elements_{0};
 
   // Position to insert the next element.
   size_t queue_end_ = 0;

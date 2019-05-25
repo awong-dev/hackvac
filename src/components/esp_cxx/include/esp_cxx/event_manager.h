@@ -16,13 +16,13 @@ class EventManager {
   using Duration = std::chrono::steady_clock::duration;
   using TimePoint = std::chrono::steady_clock::time_point;
 
-  // Will run |task| as soon as possible.
+  // Will run |closure| as soon as possible.
   void Run(std::function<void(void)> closure);
 
-  // Will run |task| at least milliseconds after this is called.
+  // Will run |closure| at least milliseconds after this is called.
   void RunDelayed(std::function<void(void)> closure, int milliseconds);
 
-  // Will run |task| on or after |run_after|.  If |run_after| is in the past,
+  // Will run |closure| on or after |run_after|.  If |run_after| is in the past,
   // closure will execute as soon as the event loop is free. It is possible
   // to starve a task if callers keeps passing |run_after| at earlier time
   // points. Don't do that.

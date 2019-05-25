@@ -124,8 +124,10 @@ void cpp_entry() {
   }
 
   // Initialize hackvac controller and run on higher priority thread.
+  MongooseEventManager net_event_manager;
   QueueSetEventManager controller_event_manager(100);  // TODO(awong): Size this.
-  esp_cxx::AsyncDataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacketThunk> data_logger("hi");
+  esp_cxx::AsyncDataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacketThunk>
+      data_logger(&net_event_manager);
   static hackvac::Controller controller(&controller_event_manager, &data_logger);
   controller.Start();
   Task controller_task = Task::Create<EventManager, &EventManager::Loop>(&controller_event_manager, "controller");
@@ -137,7 +139,6 @@ void cpp_entry() {
   std::string_view resp404_html(
       reinterpret_cast<const char*>(HTML_CONTENTS(resp404_html)),
       HTML_LEN(resp404_html));
-  MongooseEventManager net_event_manager;
   HttpServer http_server(&net_event_manager, ":8080", resp404_html);
   StandardEndpoints standard_endpoints(index_html);
   standard_endpoints.RegisterEndpoints(&http_server);

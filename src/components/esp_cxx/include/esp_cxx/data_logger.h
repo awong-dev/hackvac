@@ -26,34 +26,35 @@ class DataLogger {
 template <typename T, size_t size, void(*LogFunc)(T)>
 class AsyncDataLogger : public DataLogger<T> {
  public:
-  explicit AsyncDataLogger(const char* name) : name_(name) {}
-  virtual ~AsyncDataLogger() = default;
-
-  void Init() override {
-    task_ = Task::Create<AsyncDataLogger, &AsyncDataLogger::LogTaskRunLoop>(this, name_);
+  // |event_manager| is where LogFunc is run.
+  explicit AsyncDataLogger(EventManager* event_manager)
+    : event_manager_(event_manager)  {
+      PublishLog();
   }
+  virtual ~AsyncDataLogger() = default;
 
   void Log(const char* tag, T data) override {
     data_log_.Put(std::move(data));
-    task_.Notify();
   }
 
  private:
-  void LogTaskRunLoop() {
-    for (;;) {
-      while (auto data = data_log_.Get()) {
-        LogFunc(std::move(data.value()));
+  void PublishLog() {
+    // Limit how many logs are sent at once to not allow packet logging
+    // to completely DoS the network event loop.
+    static constexpr int kMaxLogBurst = 5;
+    static constexpr int kLogIntervalMs = 10;
+    for (int i = 0; i < kMaxLogBurst; ++i) {
+      auto data = data_log_.Get();
+      if (!data) {
+        break;
       }
-      Task::CurrentTaskWait();
+      LogFunc(std::move(data.value()));
     }
+    event_manager_->RunDelayed([=]{PublishLog();}, data_log_.NumItems() == 0 ? kLogIntervalMs : 0);
   }
 
-  // name for task and logging.
-  // TODO(awong): This should not create its own task.
-  const char* name_;
-
-  // Handle of logging task.
-  Task task_;
+  // EventManager to run the LogFunc() on.
+  EventManager* event_manager_;
 
   // Ring buffer for data to log.
   DataBuffer<T, size> data_log_;

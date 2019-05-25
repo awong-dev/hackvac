@@ -11,7 +11,7 @@ include Makefile
 ## Modify CFLAGS, CXXFLAGS, CPPFLAGS, and LDFLAGS after Makefile has set them.
 HOST_EXCLUDED_CFLAGS := -fstrict-volatile-bitfields -mlongcalls -Wno-error=unused-but-set-variable -Wno-old-style-declaration
 # TODO(awong): Wno-format is unfortnate.
-EXTRA_CFLAGS := -DHOST_BUILD=1 -DFAKE_ESP_IDF=1 -Wno-format
+EXTRA_CFLAGS += -DHOST_BUILD=1 -DFAKE_ESP_IDF=1 -Wno-format
 CXXFLAGS := -I$(abspath ./override) $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CXXFLAGS)) $(EXTRA_CFLAGS) -std=c++17 
 CFLAGS := -I$(abspath ./override) $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CFLAGS)) $(EXTRA_CFLAGS)
 

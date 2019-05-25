@@ -39,7 +39,7 @@ void EventManager::Loop() {
     int actual_timeout_ms = std::numeric_limits<int>::max();
     // Saturate at max int.
     if (raw_ms < actual_timeout_ms) {
-      actual_timeout_ms = std::min(0, static_cast<int>(raw_ms));
+      actual_timeout_ms = std::max(0, static_cast<int>(raw_ms));
     }
     Poll(actual_timeout_ms);
 

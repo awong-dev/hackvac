@@ -39,8 +39,8 @@ class AsyncDataLogger : public DataLogger<T> {
 
  private:
   void PublishLog() {
-    // Limit how many logs are sent at once to not allow packet logging
-    // to completely DoS the network event loop.
+    // Limit how many logs are sent at once so packet logging cannot
+    // completely DoS the event_manager_.
     static constexpr int kMaxLogBurst = 5;
     static constexpr int kLogIntervalMs = 10;
     for (int i = 0; i < kMaxLogBurst; ++i) {

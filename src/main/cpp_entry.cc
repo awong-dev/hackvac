@@ -123,16 +123,8 @@ void cpp_entry() {
     ESP_LOGE(kTag, "Failed to connect to AP OR create a Setup Network.");
   }
 
-  // Initialize hackvac controller and run on higher priority thread.
+  // Create Webserver
   MongooseEventManager net_event_manager;
-  QueueSetEventManager controller_event_manager(100);  // TODO(awong): Size this.
-  esp_cxx::AsyncDataLogger<std::unique_ptr<Cn105Packet>, 50, &Cn105Packet::LogPacketThunk>
-      data_logger(&net_event_manager);
-  static hackvac::Controller controller(&controller_event_manager, &data_logger);
-  controller.Start();
-  Task controller_task = Task::Create<EventManager, &EventManager::Loop>(&controller_event_manager, "controller");
-
-  // Run webserver.
   std::string_view index_html(
       reinterpret_cast<const char*>(HTML_CONTENTS(index_html)),
       HTML_LEN(index_html));
@@ -142,6 +134,18 @@ void cpp_entry() {
   HttpServer http_server(&net_event_manager, ":8080", resp404_html);
   StandardEndpoints standard_endpoints(index_html);
   standard_endpoints.RegisterEndpoints(&http_server);
+  esp_cxx::AsyncDataLogger<std::unique_ptr<Cn105Packet>, 50>
+      data_logger(&net_event_manager, [=](std::unique_ptr<Cn105Packet> packet) {
+                  packet->DebugLog();
+                  });
 
+  // Create controller.
+  QueueSetEventManager controller_event_manager(100);  // TODO(awong): Size this.
+  static hackvac::Controller controller(&controller_event_manager, &data_logger);
+  controller.Start();
+
+  // Start all event managers.
+  // TODO(awong): Run the controller_task at a higher level.
+  Task controller_task = Task::Create<EventManager, &EventManager::Loop>(&controller_event_manager, "controller");
   net_event_manager.Loop();
 }

@@ -35,3 +35,12 @@ Unittests
 ```
 TEST_COMPONENTS=". esp_cxx" make -f Makefile.host V=1 host_build/hackvac_host 
 ```
+
+TODOs
+=====
+1. Wire up logging to udp port.
+2. Sort out `main/event_log.h`
+3. Sort out representation of device view of settings vs what is being pushed.
+4. Unittest HalfDuplexChannel timings.
+5. Deploy to device. Design real smoke and burn-in test.
+6. Deploy for real.

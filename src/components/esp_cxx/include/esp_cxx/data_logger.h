@@ -23,12 +23,13 @@ class DataLogger {
 //   DataLogger<std::unique_ptr<PacketType>, 50, &LogPacket> logger;
 //     ...
 //   logger.Log(std::move(some_packet));
-template <typename T, size_t size, void(*LogFunc)(T)>
+template <typename T, size_t size>
 class AsyncDataLogger : public DataLogger<T> {
  public:
   // |event_manager| is where LogFunc is run.
-  explicit AsyncDataLogger(EventManager* event_manager)
-    : event_manager_(event_manager)  {
+  explicit AsyncDataLogger(EventManager* event_manager, std::function<void(T)> log_func)
+    : event_manager_(event_manager),
+      log_func_(log_func) {
       PublishLog();
   }
   virtual ~AsyncDataLogger() = default;
@@ -39,8 +40,8 @@ class AsyncDataLogger : public DataLogger<T> {
 
  private:
   void PublishLog() {
-    // Limit how many logs are sent at once so packet logging cannot
-    // completely DoS the event_manager_.
+    // Limit how many logs are sent at once so data logging cannot
+    // completely DoS the |event_manager_|.
     static constexpr int kMaxLogBurst = 5;
     static constexpr int kLogIntervalMs = 10;
     for (int i = 0; i < kMaxLogBurst; ++i) {
@@ -48,13 +49,16 @@ class AsyncDataLogger : public DataLogger<T> {
       if (!data) {
         break;
       }
-      LogFunc(std::move(data.value()));
+      log_func_(std::move(data.value()));
     }
     event_manager_->RunDelayed([=]{PublishLog();}, data_log_.NumItems() == 0 ? kLogIntervalMs : 0);
   }
 
   // EventManager to run the LogFunc() on.
   EventManager* event_manager_;
+
+  // Function to use on log data.
+  std::function<void(T)> log_func_;
 
   // Ring buffer for data to log.
   DataBuffer<T, size> data_log_;

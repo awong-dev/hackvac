@@ -72,7 +72,7 @@ class WebsocketChannel {
 
   template <typename T, void (T::*)(WebsocketFrame frame)>
   void Connect(T* ptr) {
-    //
+    // TODO(awong): Implement this!
   }
 
   void SendText(std::string_view text);

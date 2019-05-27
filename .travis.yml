@@ -1,0 +1,8 @@
+language: cpp
+compiler: gcc
+
+script: bash -c "cd src; make -j5 -f Makefile.host GTEST_MAIN=1 V=1 host_build/hackvac_host && ./host_build/hackvac_host"
+
+env:
+  global:
+    - TEST_COMPONENTS="."

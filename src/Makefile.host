@@ -9,6 +9,7 @@ include Makefile
 
 
 ## Modify CFLAGS, CXXFLAGS, CPPFLAGS, and LDFLAGS after Makefile has set them.
+export HOST_BUILD := 1
 HOST_EXCLUDED_CFLAGS := -fstrict-volatile-bitfields -mlongcalls -Wno-error=unused-but-set-variable -Wno-old-style-declaration
 # TODO(awong): Wno-format is unfortnate.
 EXTRA_CFLAGS += -DHOST_BUILD=1 -DFAKE_ESP_IDF=1 -Wno-format
@@ -20,6 +21,6 @@ CPPFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CPPFLAGS))
 LDFLAGS := -pthreads
 OBJCOPY = $(ESPCXX_HOST_OBJCOPY_WRAPPER)
 
-$(BUILD_DIR_BASE)/hackvac_host: $(foreach libcomp,$(COMPONENT_LIBRARIES),$(BUILD_DIR_BASE)/$(libcomp)/lib$(libcomp).a)
+$(BUILD_DIR_BASE)/hackvac_host: $(COMPONENT_LIBRARY_DEPS)
 	$(summary) LD $(patsubst $(PWD)/%,%,$@)
 	$(CXX) $(LDFLAGS) -o $@ $(COMPONENT_LDFLAGS)

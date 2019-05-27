@@ -18,7 +18,7 @@ CFLAGS := -I$(abspath ./override) $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CFLAGS)
 
 HOST_EXCLUDED_CPPFLAGS := -DMBEDTLS_CONFIG_FILE='"mbedtls/esp_config.h"'
 CPPFLAGS := $(filter-out ${HOST_EXCLUDED_CFLAGS},$(CPPFLAGS))
-LDFLAGS := -pthreads
+LDFLAGS := -pthread
 OBJCOPY = $(ESPCXX_HOST_OBJCOPY_WRAPPER)
 
 $(BUILD_DIR_BASE)/hackvac_host: $(COMPONENT_LIBRARY_DEPS)

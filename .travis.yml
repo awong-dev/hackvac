@@ -13,3 +13,10 @@ script:
   - cd src
   - TEST_COMPONENTS="." make -f Makefile.host GTEST_MAIN=1 V=1 host_build/hackvac_host
   - ./host_build/hackvac_host
+
+cache:
+  ccache: true
+  directories:
+    - third_party/esp-idf
+    - components/mongoose/src
+    - components/googletest

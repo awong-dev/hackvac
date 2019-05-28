@@ -15,6 +15,7 @@ script:
   - cd src
   - cat Makefile.host
   - ls -la
+  - make sdkconfig
   - TEST_COMPONENTS="." make -f Makefile.host GTEST_MAIN=1 V=1 host_build/hackvac_host
   - ./host_build/hackvac_host
 

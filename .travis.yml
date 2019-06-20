@@ -13,15 +13,16 @@ install:
 script:
   - source env.sh
   - cd src
-  - cat Makefile.host
-  - ls -la
-  - make sdkconfig
+  - env
   - TEST_COMPONENTS="." make -f Makefile.host GTEST_MAIN=1 V=1 host_build/hackvac_host
   - ./host_build/hackvac_host
 
 cache:
   ccache: true
   directories:
+    - /home/travis/build/awong-dev/hackvac/third_party/esp-idf
+    - /home/travis/build/awong-dev/hackvac/src/components/mongoose/src
+    - /home/travis/build/awong-dev/hackvac/src/components/googletest
     - third_party/esp-idf
     - src/components/mongoose/src
     - src/components/googletest

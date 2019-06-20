@@ -1,6 +1,7 @@
 ## High-level configuration variables.
 BUILD_DIR_BASE := host_build
 COMPONENTS := googletest esp_cxx mongoose mbedtls json jsmn main
+SDKCONFIG ?= $(abspath ./sdkconfig.host)
 
 
 ## Sandwich include the normal make files.

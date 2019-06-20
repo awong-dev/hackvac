@@ -3,6 +3,7 @@ compiler: gcc
 
 before_install:
   - pip install --user --upgrade pip virtualenv
+  - sudo apt-get install -y gperf
   - virtualenv venv
   - source venv/bin/activate
 
@@ -14,6 +15,8 @@ script:
   - source env.sh
   - cd src
   - env
+  - make -f Makefile.host host_build/include/sdkconfig.h
+  - make -f Makefile.host host_build/include/sdkconfig.h  # Do it twice since teh first creates the directory but fails.
   - TEST_COMPONENTS="." make -f Makefile.host GTEST_MAIN=1 V=1 host_build/hackvac_host
   - ./host_build/hackvac_host
 

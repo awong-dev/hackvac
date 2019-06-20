@@ -33,6 +33,8 @@ called `hackvac_setup` with setup `cn105rulez`.
 
 Unittests
 ```
+make -f Makefile.host host_build/include/sdkconfig.h
+make -f Makefile.host host_build/include/sdkconfig.h  # Twice to ensure creation.
 TEST_COMPONENTS=". esp_cxx" make -f Makefile.host V=1 host_build/hackvac_host 
 ```
 

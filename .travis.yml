@@ -19,10 +19,3 @@ script:
 
 cache:
   ccache: true
-  directories:
-    - /home/travis/build/awong-dev/hackvac/third_party/esp-idf
-    - /home/travis/build/awong-dev/hackvac/src/components/mongoose/src
-    - /home/travis/build/awong-dev/hackvac/src/components/googletest
-    - third_party/esp-idf
-    - src/components/mongoose/src
-    - src/components/googletest

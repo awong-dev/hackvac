@@ -13,7 +13,9 @@
 #else
 #include <unistd.h>
 
+#include <condition_variable>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <queue>
 #endif

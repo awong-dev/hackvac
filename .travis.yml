@@ -4,6 +4,7 @@ compiler: gcc
 before_install:
   - pip install --user --upgrade pip virtualenv
   - sudo apt-get install -y gperf
+  - git submodule update --init --recursive
   - wget https://dl.espressif.com/dl/xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz
   - tar xzf xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz -C third_party
   - virtualenv venv
@@ -22,5 +23,13 @@ script:
   - TEST_COMPONENTS="." make -f Makefile.host GTEST_MAIN=1 V=1 host_build/hackvac_host
   - ./host_build/hackvac_host
 
+# Manually update submodules.
+git:
+  submodules: false
+
 cache:
   ccache: true
+  directories:
+    - $(TRAVIS_BUILD_DIR)/hackvac/third_party/xtensa-esp32-elf
+    - $(TRAVIS_BUILD_DIR)/hackvac/third_party/esp-idf
+

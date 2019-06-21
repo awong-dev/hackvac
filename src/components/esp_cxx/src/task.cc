@@ -4,6 +4,7 @@
 
 #ifdef FAKE_ESP_IDF
 #include <unistd.h>
+#include <signal.h>
 #endif
 
 namespace {

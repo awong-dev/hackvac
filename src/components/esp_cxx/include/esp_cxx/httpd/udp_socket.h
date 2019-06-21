@@ -3,7 +3,8 @@
 
 #include <functional>
 #include <string>
-#include <string_view>
+
+#include "esp_cxx/cxx17hack.h"
 
 struct mg_connection;
 

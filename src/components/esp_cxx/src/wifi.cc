@@ -1,5 +1,6 @@
 #include "esp_cxx/wifi.h"
 
+#include <assert.h>
 #include <string.h>
 
 #include "esp_cxx/logging.h"

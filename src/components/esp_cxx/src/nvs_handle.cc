@@ -1,6 +1,7 @@
 #include "esp_cxx/nvs_handle.h"
 
-#include <cstring>
+#include <string.h>
+#include <assert.h>
 
 namespace esp_cxx {
 

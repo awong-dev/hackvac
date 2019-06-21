@@ -1,6 +1,7 @@
 #include "half_duplex_channel.h"
 
 #include <alloca.h>
+#include <assert.h>
 
 #include "esp_cxx/logging.h"
 

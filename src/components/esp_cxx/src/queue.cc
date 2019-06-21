@@ -3,7 +3,12 @@
 #include "esp_cxx/task.h"
 
 #ifdef FAKE_ESP_IDF
+
+#include <assert.h>
+#include <string.h>
 #include <unistd.h>
+
+#include <algorithm>
 #include <chrono>
 #include <numeric>
 #include <random>

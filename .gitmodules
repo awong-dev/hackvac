@@ -7,3 +7,6 @@
 [submodule "third_party/esp-idf"]
 	path = third_party/esp-idf
 	url = https://github.com/awong-dev/esp-idf.git
+[submodule "src/components/esp_cxx"]
+	path = src/components/esp_cxx
+	url = https://github.com/awong-dev/esp_cxx.git

@@ -1,1 +1,0 @@
-ESPCXX_HOST_OBJCOPY_WRAPPER := $(COMPONENT_PATH)/script/objcopy-wrapper
